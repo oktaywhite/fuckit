@@ -17,11 +17,7 @@ export async function deleteMatchAction(formData: FormData) {
   // Re-calculate all MMR and stats from scratch to ensure consistency
   await recalculateAllPlayerStats();
 
-  revalidatePath("/admin/matches");
-  revalidatePath("/admin");
-  revalidatePath("/leaderboard");
-  revalidatePath("/players");
-  revalidatePath("/");
+  revalidatePath("/", "layout");
 }
 
 export async function createMatchAction(formData: FormData) {
@@ -42,7 +38,8 @@ export async function createMatchAction(formData: FormData) {
 
     // Get active season
     const activeSeason = await prisma.season.findFirst({
-      where: { isActive: true }
+      where: { isActive: true },
+      orderBy: { startDate: "desc" }
     });
 
     if (!activeSeason) {
@@ -96,9 +93,6 @@ export async function createMatchAction(formData: FormData) {
     return { error: error.message || "Bir hata oluştu" };
   }
 
-  revalidatePath("/admin");
-  revalidatePath("/leaderboard");
-  revalidatePath("/players");
-  revalidatePath("/");
+  revalidatePath("/", "layout");
   redirect("/admin/matches");
 }
