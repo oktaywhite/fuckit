@@ -196,29 +196,71 @@ export default async function PlayerProfilePage(props: {
 
   const bestDuo = allTeammates.length > 0 && allTeammates[0].matches > 0 ? allTeammates[0] : null;
 
+  // Find most played character for current game
+  const championCounts: Record<string, number> = {};
+  player.matchParticipants.forEach((mp: any) => {
+    if (mp.match.game === game && mp.champion && mp.champion !== "Unknown") {
+      championCounts[mp.champion] = (championCounts[mp.champion] || 0) + 1;
+    }
+  });
+
+  let mostPlayedChampion = "";
+  let maxCount = 0;
+  Object.entries(championCounts).forEach(([champion, count]) => {
+    if (count > maxCount) {
+      mostPlayedChampion = champion;
+      maxCount = count;
+    }
+  });
+
+  let headerBgImage = "";
+  if (mostPlayedChampion) {
+    const filename = mostPlayedChampion.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (game === "LOL") headerBgImage = `/images/lol/${filename}-bg.png`;
+    if (game === "VALORANT") headerBgImage = `/images/valorant/${filename}-bg.png`;
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Profile Header */}
-      <div className="relative flex flex-col md:flex-row items-center md:items-start gap-8 bg-card/50 p-8 rounded-xl border border-border/50 backdrop-blur">
-        <div className="absolute top-4 right-4 hidden sm:flex items-center gap-2">
+      <div className="relative overflow-hidden flex flex-col md:flex-row items-center md:items-start gap-8 bg-card/50 p-8 rounded-xl border border-border/50 backdrop-blur">
+        {headerBgImage && (
+          <div
+            className="absolute inset-0 z-0 opacity-40 pointer-events-none"
+            style={game === "LOL" ? {
+              backgroundImage: `url('${headerBgImage}')`,
+              backgroundRepeat: 'no-repeat',
+              backgroundSize: '40%',
+              backgroundPosition: '60% 0%',
+              transform: 'translateY(10px)',
+            } : {
+              backgroundImage: `url('${headerBgImage}')`,
+              backgroundRepeat: 'no-repeat',
+              backgroundSize: '40%',
+              backgroundPosition: '60% 0%',
+              transform: 'translateY(0px)',
+            }}
+          />
+        )}
+        <div className="absolute top-4 right-4 hidden sm:flex items-center gap-2 z-20">
           <Link href={`/player/${decodedNickname}?game=LOL`}>
-            <Button variant={game === "LOL" ? "default" : "outline"} size="sm" className="rounded-full h-6 px-3 text-[10px] font-bold uppercase">LoL</Button>
+            <Button variant={game === "LOL" ? "default" : "outline"} size="sm" className="rounded-full h-6 px-3 text-[10px] font-bold uppercase backdrop-blur">LoL</Button>
           </Link>
           <Link href={`/player/${decodedNickname}?game=VALORANT`}>
-            <Button variant={game === "VALORANT" ? "default" : "outline"} size="sm" className="rounded-full h-6 px-3 text-[10px] font-bold uppercase">Valorant</Button>
+            <Button variant={game === "VALORANT" ? "default" : "outline"} size="sm" className="rounded-full h-6 px-3 text-[10px] font-bold uppercase backdrop-blur">Valorant</Button>
           </Link>
           <Link href={`/player/${decodedNickname}?game=ROCKET_LEAGUE`}>
-            <Button variant={game === "ROCKET_LEAGUE" ? "default" : "outline"} size="sm" className="rounded-full h-6 px-3 text-[10px] font-bold uppercase">Rocket League</Button>
+            <Button variant={game === "ROCKET_LEAGUE" ? "default" : "outline"} size="sm" className="rounded-full h-6 px-3 text-[10px] font-bold uppercase backdrop-blur">Rocket League</Button>
           </Link>
         </div>
-        <Avatar className="h-32 w-32 border-4 border-primary/20">
+        <Avatar className="h-32 w-32 border-4 border-primary/20 relative z-10">
           <AvatarImage src={player.avatar || undefined} alt={player.nickname} />
           <AvatarFallback className="bg-primary/10 text-primary text-4xl font-bold">
             {player.nickname.substring(0, 2).toUpperCase()}
           </AvatarFallback>
         </Avatar>
 
-        <div className="flex flex-col items-center md:items-start space-y-4 flex-1 min-w-0">
+        <div className="flex flex-col items-center md:items-start space-y-4 flex-1 min-w-0 relative z-10">
           <div className="w-full">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-4xl font-extrabold tracking-tight truncate mr-2">{player.nickname}</h1>
@@ -482,85 +524,106 @@ export default async function PlayerProfilePage(props: {
               const isWin = mp.team === match.winner;
               const mmrChange = mmrChangeMap.get(match.id);
 
+              let bgImage = "";
+              if (mp.champion && mp.champion !== "Unknown") {
+                const filename = mp.champion.toLowerCase().replace(/[^a-z0-9]/g, '');
+                if (match.game === "LOL") bgImage = `/images/lol/${filename}.png`;
+                if (match.game === "VALORANT") bgImage = `/images/valorant/${filename}.png`;
+              }
+
               return (
                 <div
                   key={match.id}
-                  className={`flex flex-col md:flex-row gap-4 p-4 rounded-lg border transition-all ${isWin ? "bg-blue-500/5 border-blue-500/20" : "bg-red-500/5 border-red-500/20"
+                  className={`relative overflow-hidden flex flex-col md:flex-row rounded-lg border transition-all ${isWin ? "bg-blue-500/5 border-blue-500/20" : "bg-red-500/5 border-red-500/20"
                     }`}
                 >
-                  {/* Result indicator */}
-                  <div className="flex flex-row md:flex-col flex-wrap justify-between md:justify-center items-center md:w-28 shrink-0 gap-1">
-                    <span className={`font-bold text-lg ${isWin ? "text-blue-400" : "text-red-400"}`}>
-                      {isWin ? "VICTORY" : "DEFEAT"}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {match.date.toLocaleDateString()}
-                    </span>
-                    {match.season && (
-                      <Badge variant="secondary" className="mt-0.5 text-[10px] leading-tight px-1.5 py-0.5 h-auto min-h-0 bg-primary/10 text-primary hover:bg-primary/20 border-primary/20 max-w-full text-center whitespace-normal break-words">
-                        {match.season.name}
-                      </Badge>
-                    )}
-                  </div>
-
-                  {/* Player Match Stats */}
-                  <div className="flex items-center gap-4 flex-1">
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-foreground">{mp.champion}</span>
-                      <span className="text-sm font-mono text-muted-foreground" title={match.game === "ROCKET_LEAGUE" ? "Gol / Asist / Save / Puan" : "KDA"}>
-                        {match.game === "ROCKET_LEAGUE" ? `${mp.kills} / ${mp.assists} / ${mp.deaths} / ${mp.points || 0}` : `${mp.kills} / ${mp.deaths} / ${mp.assists}`}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* MMR Change */}
-                  {mmrChange !== undefined && (
-                    <div className="flex items-center justify-center shrink-0">
-                      <span className={cn(
-                        "font-mono font-black text-base px-3 py-1.5 rounded-lg border",
-                        mmrChange > 0
-                          ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20"
-                          : mmrChange < 0
-                            ? "text-red-500 bg-red-500/10 border-red-500/20"
-                            : "text-muted-foreground bg-muted/10 border-border/50"
-                      )}>
-                        {mmrChange > 0 ? `+${mmrChange}` : mmrChange}
-                      </span>
-                    </div>
+                  {bgImage && (
+                    <div
+                      className="w-full md:w-36 h-24 md:h-auto shrink-0 bg-no-repeat bg-cover bg-center"
+                      style={{
+                        backgroundImage: `url('${bgImage}')`,
+                        ...(match.game === "VALORANT" ? {
+                          maskImage: 'linear-gradient(to left, black 70%, transparent 100%)',
+                          WebkitMaskImage: 'linear-gradient(to left, black 70%, transparent 100%)'
+                        } : {})
+                      }}
+                    />
                   )}
-
-                  {/* Teams Overview */}
-                  <div className="hidden md:flex flex-row gap-6 items-center text-xs w-72 shrink-0 bg-background/50 p-2 rounded-md border border-border/50">
-                    {/* Blue Team */}
-                    <div className="flex flex-col gap-1.5 w-full">
-                      {match.participants.filter((p: any) => p.team === "BLUE").map((p: any) => (
-                        <div key={p.id} className="flex items-center gap-2 group w-full">
-                          <div className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-black shrink-0 bg-blue-500/10 text-blue-500 border border-blue-500/20" title={p.champion}>
-                            {p.champion.substring(0, 2).toUpperCase()}
-                          </div>
-                          <Link href={`/player/${p.player.nickname}?game=${game}`} className={`truncate flex-1 hover:underline ${p.player.nickname === decodedNickname ? "text-foreground font-bold" : "text-muted-foreground"}`}>
-                            {p.player.nickname}
-                          </Link>
-                        </div>
-                      ))}
+                  <div className="flex flex-col md:flex-row gap-4 p-4 flex-1">
+                    {/* Result indicator */}
+                    <div className="relative z-10 flex flex-row md:flex-col flex-wrap justify-between md:justify-center items-center md:w-28 shrink-0 gap-1">
+                      <span className={`font-bold text-lg ${isWin ? "text-blue-400" : "text-red-400"}`}>
+                        {isWin ? "VICTORY" : "DEFEAT"}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {match.date.toLocaleDateString()}
+                      </span>
+                      {match.season && (
+                        <Badge variant="secondary" className="mt-0.5 text-[10px] leading-tight px-1.5 py-0.5 h-auto min-h-0 bg-primary/10 text-primary hover:bg-primary/20 border-primary/20 max-w-full text-center whitespace-normal break-words">
+                          {match.season.name}
+                        </Badge>
+                      )}
                     </div>
 
-                    <div className="flex flex-col items-center justify-center">
-                      <span className="text-[10px] font-black text-muted-foreground/30">VS</span>
+                    {/* Player Match Stats */}
+                    <div className="relative z-10 flex items-center gap-4 flex-1">
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-foreground">{mp.champion}</span>
+                        <span className="text-sm font-mono text-muted-foreground" title={match.game === "ROCKET_LEAGUE" ? "Gol / Asist / Save / Puan" : "KDA"}>
+                          {match.game === "ROCKET_LEAGUE" ? `${mp.kills} / ${mp.assists} / ${mp.deaths} / ${mp.points || 0}` : `${mp.kills} / ${mp.deaths} / ${mp.assists}`}
+                        </span>
+                      </div>
                     </div>
 
-                    {/* Red Team */}
-                    <div className="flex flex-col gap-1.5 w-full">
-                      {match.participants.filter((p: any) => p.team === "RED").map((p: any) => (
-                        <div key={p.id} className="flex items-center gap-2 group w-full flex-row-reverse text-right">
-                          <div className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-black shrink-0 bg-red-500/10 text-red-500 border border-red-500/20" title={p.champion}>
-                            {p.champion.substring(0, 2).toUpperCase()}
+                    {/* MMR Change */}
+                    {mmrChange !== undefined && (
+                      <div className="relative z-10 flex items-center justify-center shrink-0">
+                        <span className={cn(
+                          "font-mono font-black text-base px-3 py-1.5 rounded-lg border",
+                          mmrChange > 0
+                            ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20"
+                            : mmrChange < 0
+                              ? "text-red-500 bg-red-500/10 border-red-500/20"
+                              : "text-muted-foreground bg-muted/10 border-border/50"
+                        )}>
+                          {mmrChange > 0 ? `+${mmrChange}` : mmrChange}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Teams Overview */}
+                    <div className="hidden md:flex flex-row gap-6 items-center text-xs w-72 shrink-0 bg-background/50 p-2 rounded-md border border-border/50">
+                      {/* Blue Team */}
+                      <div className="flex flex-col gap-1.5 w-full">
+                        {match.participants.filter((p: any) => p.team === "BLUE").map((p: any) => (
+                          <div key={p.id} className="flex items-center gap-2 group w-full">
+                            <div className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-black shrink-0 bg-blue-500/10 text-blue-500 border border-blue-500/20" title={p.champion}>
+                              {p.champion.substring(0, 2).toUpperCase()}
+                            </div>
+                            <Link href={`/player/${p.player.nickname}?game=${game}`} className={`truncate flex-1 hover:underline ${p.player.nickname === decodedNickname ? "text-foreground font-bold" : "text-muted-foreground"}`}>
+                              {p.player.nickname}
+                            </Link>
                           </div>
-                          <Link href={`/player/${p.player.nickname}?game=${game}`} className={`truncate flex-1 hover:underline ${p.player.nickname === decodedNickname ? "text-foreground font-bold" : "text-muted-foreground"}`}>
-                            {p.player.nickname}
-                          </Link>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+
+                      <div className="flex flex-col items-center justify-center">
+                        <span className="text-[10px] font-black text-muted-foreground/30">VS</span>
+                      </div>
+
+                      {/* Red Team */}
+                      <div className="flex flex-col gap-1.5 w-full">
+                        {match.participants.filter((p: any) => p.team === "RED").map((p: any) => (
+                          <div key={p.id} className="flex items-center gap-2 group w-full flex-row-reverse text-right">
+                            <div className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-black shrink-0 bg-red-500/10 text-red-500 border border-red-500/20" title={p.champion}>
+                              {p.champion.substring(0, 2).toUpperCase()}
+                            </div>
+                            <Link href={`/player/${p.player.nickname}?game=${game}`} className={`truncate flex-1 hover:underline ${p.player.nickname === decodedNickname ? "text-foreground font-bold" : "text-muted-foreground"}`}>
+                              {p.player.nickname}
+                            </Link>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
