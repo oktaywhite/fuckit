@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Player {
+  id         String   @id @default(cuid())
+  nickname   String   @unique
+  avatar     String?
+  currentMmr Int      @default(1000)
+  peakMmr    Int      @default(1000)
+  wins       Int      @default(0)
+  losses     Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  matchParticipants MatchParticipant[]
+  mmrAdjustments    MmrAdjustment[]
+  seasonStats       PlayerSeasonStat[]
+}
+
+model Season {
+  id        String   @id @default(cuid())
+  name      String
+  isActive  Boolean  @default(true)
+  startDate DateTime @default(now())
+  endDate   DateTime?
+
+  matches   Match[]
+  stats     PlayerSeasonStat[]
+}
+
+model PlayerSeasonStat {
+  id         String   @id @default(cuid())
+  playerId   String
+  seasonId   String
+  finalMmr   Int      @default(1000)
+  peakMmr    Int      @default(1000)
+  wins       Int      @default(0)
+  losses     Int      @default(0)
+  
+  player     Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  season     Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, seasonId])
+}
+
+model MmrAdjustment {
+  id        String   @id @default(cuid())
+  playerId  String
+  amount    Int
+  date      DateTime @default(now())
+
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+}
+
+model Match {
+  id        String   @id @default(cuid())
+  date      DateTime @default(now())
+  winner    String   // "BLUE" or "RED"
+  seasonId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants MatchParticipant[]
+  season       Season?            @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+}
+
+model MatchParticipant {
+  id       String @id @default(cuid())
+  matchId  String
+  playerId String
+  team     String // "BLUE" or "RED"
+  champion String
+  kills    Int
+  deaths   Int
+  assists  Int
+
+  match  Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, playerId])
+}
