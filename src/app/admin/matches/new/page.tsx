@@ -7,9 +7,14 @@ import { ArrowLeft } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export default async function NewMatchPage() {
+  const activeSeasons = await prisma.season.findMany({
+    where: { isActive: true },
+    orderBy: { startDate: "desc" }
+  });
+
   const players = await prisma.player.findMany({
     orderBy: { nickname: "asc" },
-    select: { id: true, nickname: true, currentMmr: true }
+    include: { gameStats: true }
   });
 
   return (
@@ -28,7 +33,7 @@ export default async function NewMatchPage() {
         </div>
       </div>
 
-      <MatchForm players={players} />
+      <MatchForm players={players} activeSeasons={activeSeasons} />
     </div>
   );
 }

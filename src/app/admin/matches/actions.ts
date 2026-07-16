@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { recalculateAllPlayerStats } from "@/lib/stats";
+import { Game } from "@prisma/client";
 
 export async function deleteMatchAction(formData: FormData) {
   const id = formData.get("id") as string;
@@ -28,22 +29,21 @@ export async function createMatchAction(formData: FormData) {
     const data = JSON.parse(payloadStr);
     
     // Data validation
-    if (!data.winner || !data.blueTeam || !data.redTeam) {
-      return { error: "Eksik veri" };
+    if (!data.winner || !data.blueTeam || !data.redTeam || !data.seasonId) {
+      return { error: "Eksik veri (Lütfen sezon seçin)" };
     }
 
     if (data.blueTeam.length === 0 || data.redTeam.length === 0) {
       return { error: "Takımlar boş olamaz" };
     }
 
-    // Get active season
-    const activeSeason = await prisma.season.findFirst({
-      where: { isActive: true },
-      orderBy: { startDate: "desc" }
+    // Get selected season
+    const selectedSeason = await prisma.season.findUnique({
+      where: { id: data.seasonId }
     });
 
-    if (!activeSeason) {
-      return { error: "Şu an aktif bir sezon yok. Lütfen önce admin panelinden bir sezon başlatın." };
+    if (!selectedSeason || !selectedSeason.isActive) {
+      return { error: "Geçersiz veya kapalı sezon." };
     }
 
     // Create match
@@ -51,7 +51,8 @@ export async function createMatchAction(formData: FormData) {
       data: {
         winner: data.winner,
         date: new Date(),
-        seasonId: activeSeason.id,
+        seasonId: selectedSeason.id,
+        game: selectedSeason.game,
       },
     });
 
@@ -66,6 +67,7 @@ export async function createMatchAction(formData: FormData) {
         kills: parseInt(p.kills) || 0,
         deaths: parseInt(p.deaths) || 0,
         assists: parseInt(p.assists) || 0,
+        points: parseInt(p.points) || 0,
       });
     }
 
@@ -78,6 +80,7 @@ export async function createMatchAction(formData: FormData) {
         kills: parseInt(p.kills) || 0,
         deaths: parseInt(p.deaths) || 0,
         assists: parseInt(p.assists) || 0,
+        points: parseInt(p.points) || 0,
       });
     }
 

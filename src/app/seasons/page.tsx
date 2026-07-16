@@ -2,12 +2,17 @@ import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { Calendar, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
-export default async function SeasonsPage() {
+export default async function SeasonsPage({ searchParams }: { searchParams: Promise<{ game?: string }> }) {
+  const resolvedParams = await searchParams;
+  const gameParam = resolvedParams?.game || "LOL";
+  const game = (gameParam === "ROCKET_LEAGUE" || gameParam === "VALORANT") ? gameParam : "LOL";
+
   const seasons = await (prisma as any).season.findMany({
-    where: { isActive: false },
+    where: { isActive: false, game: game as any },
     orderBy: { endDate: 'desc' },
     include: {
       _count: {
@@ -18,9 +23,22 @@ export default async function SeasonsPage() {
 
   return (
     <div className="space-y-8 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-4xl mx-auto mt-8">
-      <div className="space-y-2">
-        <h1 className="text-4xl font-extrabold tracking-tight">Geçmiş Sezonlar</h1>
-        <p className="text-muted-foreground text-lg">Eski sezonların sıralamalarını ve maç arşivlerini inceleyin.</p>
+      <div className="flex flex-col md:flex-row md:items-end justify-between space-y-4 md:space-y-0">
+        <div className="space-y-2">
+          <h1 className="text-4xl font-extrabold tracking-tight">Geçmiş Sezonlar</h1>
+          <p className="text-muted-foreground text-lg">Eski sezonların sıralamalarını ve maç arşivlerini inceleyin.</p>
+        </div>
+        <div className="flex gap-2 bg-muted/30 p-1.5 rounded-xl border border-border/50">
+          <Link href="?game=LOL">
+            <Button variant={game === "LOL" ? "default" : "ghost"} size="sm" className="rounded-lg">LoL</Button>
+          </Link>
+          <Link href="?game=ROCKET_LEAGUE">
+            <Button variant={game === "ROCKET_LEAGUE" ? "default" : "ghost"} size="sm" className="rounded-lg">Rocket League</Button>
+          </Link>
+          <Link href="?game=VALORANT">
+            <Button variant={game === "VALORANT" ? "default" : "ghost"} size="sm" className="rounded-lg">Valorant</Button>
+          </Link>
+        </div>
       </div>
 
       {seasons.length === 0 ? (

@@ -6,15 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { getRankFromMmr, getRankStyle } from "@/lib/rank";
 import { cn } from "@/lib/utils";
+import { Game } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
-  const playersCount = await prisma.player.count();
-  const matchesCount = await prisma.match.count();
+export default async function RocketLeagueHome() {
+  const playersCount = await prisma.playerGameStat.count({
+    where: { game: Game.ROCKET_LEAGUE }
+  });
+  
+  const matchesCount = await prisma.match.count({
+    where: { game: Game.ROCKET_LEAGUE }
+  });
 
   const activeSeason = await (prisma as any).season.findFirst({
-    where: { isActive: true }
+    where: { isActive: true, game: Game.ROCKET_LEAGUE }
   });
 
   let remainingDays = null;
@@ -24,14 +30,14 @@ export default async function Home() {
   }
 
   const allGameStats = await prisma.playerGameStat.findMany({
-    where: { game: 'LOL' },
+    where: { game: Game.ROCKET_LEAGUE },
     orderBy: { currentMmr: 'desc' },
     take: 50,
     include: {
       player: {
         include: {
           matchParticipants: {
-            where: { match: { game: 'LOL' } }
+            where: { match: { game: Game.ROCKET_LEAGUE } }
           }
         }
       }
@@ -48,13 +54,20 @@ export default async function Home() {
     const totalAssists = player.matchParticipants.reduce((acc: number, mp: any) => acc + mp.assists, 0);
     const kda = Number(((totalKills + totalAssists) / totalDeaths).toFixed(2));
 
+    const avgGoals = totalMatches > 0 ? (totalKills / totalMatches).toFixed(1) : "0.0";
+    const avgAssists = totalMatches > 0 ? (totalAssists / totalMatches).toFixed(1) : "0.0";
+    const avgSaves = totalMatches > 0 ? (totalDeaths / totalMatches).toFixed(1) : "0.0";
+
     return {
       id: player.id,
       nickname: player.nickname,
       currentMmr: stat.currentMmr,
       totalMatches,
       winRate,
-      kda
+      kda,
+      avgGoals,
+      avgAssists,
+      avgSaves
     };
   });
 
@@ -68,7 +81,7 @@ export default async function Home() {
   const topPlayers = playersWithStats.slice(0, 4);
 
   const recentMatches = await prisma.match.findMany({
-    where: { game: 'LOL' },
+    where: { game: Game.ROCKET_LEAGUE },
     orderBy: { date: 'desc' },
     take: 50,
     include: {
@@ -84,29 +97,29 @@ export default async function Home() {
     <div className="space-y-12 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
 
       {/* HERO SECTION */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/10 via-background to-primary/5 p-6 md:py-8 md:px-12 border border-border/50 shadow-sm mt-4">
-        <div className="absolute top-0 right-0 -mt-20 -mr-20 w-64 h-64 bg-primary/20 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600/10 via-background to-blue-400/5 p-6 md:py-8 md:px-12 border border-blue-500/20 shadow-sm mt-4">
+        <div className="absolute top-0 right-0 -mt-20 -mr-20 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
         <div className="relative z-10 w-full flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="space-y-4">
-            <div className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] uppercase font-black tracking-wider shadow-sm w-fit ${activeSeason ? "border-primary/20 bg-primary/10 text-primary" : "border-destructive/20 bg-destructive/10 text-destructive"}`}>
-              <span className={`flex h-1.5 w-1.5 rounded-full mr-2 animate-pulse ${activeSeason ? "bg-primary" : "bg-destructive"}`}></span>
+            <div className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] uppercase font-black tracking-wider shadow-sm w-fit ${activeSeason ? "border-blue-500/20 bg-blue-500/10 text-blue-500" : "border-destructive/20 bg-destructive/10 text-destructive"}`}>
+              <span className={`flex h-1.5 w-1.5 rounded-full mr-2 animate-pulse ${activeSeason ? "bg-blue-500" : "bg-destructive"}`}></span>
               {activeSeason ? activeSeason.name : "Sezon Kapalı"}
             </div>
             <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-foreground leading-[1.1]">
-              FUCKIT <span className="text-primary bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/60">Arena</span>
+              Rocket League <span className="text-blue-500 bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-blue-400/60">Arena</span>
             </h1>
             <p className="text-base md:text-lg text-muted-foreground max-w-xl leading-relaxed">
-              Kendi efsaneni yaz, maçları kazan ve gerçek MMR'ını herkese kanıtla.
+              Havada uç, gol at ve takımını zafere taşı!
             </p>
           </div>
           <div className="pt-2 flex flex-wrap gap-4">
             <Link href="/leaderboard">
-              <Button size="lg" className="rounded-full font-bold px-8 shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5">
+              <Button size="lg" className="rounded-full font-bold px-8 shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 bg-blue-600 hover:bg-blue-700 text-white">
                 Sıralamayı Gör
               </Button>
             </Link>
             <Link href="/players">
-              <Button variant="outline" size="lg" className="rounded-full font-bold px-8 bg-background/50 backdrop-blur hover:bg-background/80 transition-all">
+              <Button variant="outline" size="lg" className="rounded-full font-bold px-8 bg-background/50 backdrop-blur hover:bg-background/80 transition-all border-blue-500/30">
                 Tüm Oyuncular
               </Button>
             </Link>
@@ -120,8 +133,8 @@ export default async function Home() {
           <Card className="bg-background/40 backdrop-blur-md border-border/50 shadow-sm hover:shadow-md transition-all">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Kalan Gün</CardTitle>
-              <div className="bg-primary/10 p-2 rounded-full">
-                <Trophy className="h-4 w-4 text-primary" />
+              <div className="bg-blue-500/10 p-2 rounded-full">
+                <Trophy className="h-4 w-4 text-blue-500" />
               </div>
             </CardHeader>
             <CardContent>
@@ -146,8 +159,8 @@ export default async function Home() {
         <Card className="bg-background/40 backdrop-blur-md border-border/50 shadow-sm hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Toplam Oyuncu</CardTitle>
-            <div className="bg-primary/10 p-2 rounded-full">
-              <Users className="h-4 w-4 text-primary" />
+            <div className="bg-blue-500/10 p-2 rounded-full">
+              <Users className="h-4 w-4 text-blue-500" />
             </div>
           </CardHeader>
           <CardContent>
@@ -157,8 +170,8 @@ export default async function Home() {
         <Card className="bg-background/40 backdrop-blur-md border-border/50 shadow-sm hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Oynanan Maç</CardTitle>
-            <div className="bg-primary/10 p-2 rounded-full">
-              <Activity className="h-4 w-4 text-primary" />
+            <div className="bg-blue-500/10 p-2 rounded-full">
+              <Activity className="h-4 w-4 text-blue-500" />
             </div>
           </CardHeader>
           <CardContent>
@@ -175,14 +188,14 @@ export default async function Home() {
               <div className="text-muted-foreground">No players found.</div>
             ) : (
               topPlayers.map((player: any, index: number) => {
-                const rank = getRankFromMmr(player.currentMmr);
+                const rank = getRankFromMmr(player.currentMmr, "ROCKET_LEAGUE");
 
                 return (
-                  <Link key={player.id} href={`/player/${player.nickname}?game=LOL`}>
+                  <Link key={player.id} href={`/player/${player.nickname}?game=ROCKET_LEAGUE`}>
                     <Card className="bg-card hover:bg-muted/50 transition-colors border-border/50 shadow-sm group">
                       <div className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
                         <div className="flex items-center gap-4 min-w-[180px] w-full sm:w-auto">
-                          <div className="flex h-10 w-10 text-lg items-center justify-center rounded-full bg-primary/10 text-primary font-bold shrink-0">
+                          <div className="flex h-10 w-10 text-lg items-center justify-center rounded-full bg-blue-500/10 text-blue-500 font-bold shrink-0">
                             {index + 1}
                           </div>
                           <div className="flex flex-col">
@@ -204,14 +217,14 @@ export default async function Home() {
                             <span className="font-bold text-sm">{player.totalMatches}</span>
                           </div>
                           <div className="h-8 w-px bg-border/50 mx-3"></div>
-                          <div className="flex flex-col text-center min-w-[50px]">
-                            <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider mb-0.5">KDA</span>
-                            <span className="font-mono font-bold text-sm">{player.kda.toFixed(2)}</span>
+                          <div className="flex flex-col text-center min-w-[70px]">
+                            <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider mb-0.5">G/A/S</span>
+                            <span className="font-mono font-bold text-xs">{player.avgGoals}/{player.avgAssists}/{player.avgSaves}</span>
                           </div>
                         </div>
 
                         <div className="flex items-center gap-2 bg-background/50 px-3 py-1.5 rounded-lg border border-border/50 shrink-0 w-full sm:w-auto justify-center sm:justify-start">
-                          <Trophy className="h-4 w-4 text-primary" />
+                          <Trophy className="h-4 w-4 text-blue-500" />
                           <span className="font-mono font-bold text-lg">{player.currentMmr}</span>
                         </div>
                       </div>
@@ -237,7 +250,7 @@ export default async function Home() {
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground font-medium">{match.date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                       {match.season && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 shrink-0">{match.season.name}</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-500/10 text-blue-500 border border-blue-500/20 shrink-0">{match.season.name}</span>
                       )}
                     </div>
                     <span className={`font-black px-2 py-0.5 rounded text-[10px] shrink-0 ${match.winner === "BLUE" ? "bg-blue-500/10 text-blue-500 border border-blue-500/20" : "bg-red-500/10 text-red-500 border border-red-500/20"}`}>
@@ -254,11 +267,11 @@ export default async function Home() {
                             {p.champion.substring(0, 2).toUpperCase()}
                           </div>
                           <div className="flex flex-col min-w-0">
-                            <Link href={`/player/${p.player.nickname}?game=LOL`} className="truncate text-xs font-medium hover:underline text-muted-foreground group-hover:text-foreground transition-colors">
+                            <Link href={`/player/${p.player.nickname}?game=ROCKET_LEAGUE`} className="truncate text-xs font-medium hover:underline text-muted-foreground group-hover:text-foreground transition-colors">
                               {p.player.nickname}
                             </Link>
-                            <span className="text-[9px] font-mono text-muted-foreground/60 leading-none mt-0.5">
-                              {p.kills} / {p.deaths} / {p.assists}
+                            <span className="text-[9px] font-mono text-muted-foreground/60 leading-none mt-0.5" title="Gol / Asist / Save / Puan">
+                              {p.kills} / {p.assists} / {p.deaths} / {p.points || 0}
                             </span>
                           </div>
                         </div>
@@ -275,11 +288,11 @@ export default async function Home() {
                             {p.champion.substring(0, 2).toUpperCase()}
                           </div>
                           <div className="flex flex-col items-end min-w-0">
-                            <Link href={`/player/${p.player.nickname}?game=LOL`} className="truncate text-xs font-medium hover:underline text-muted-foreground group-hover:text-foreground transition-colors">
+                            <Link href={`/player/${p.player.nickname}?game=ROCKET_LEAGUE`} className="truncate text-xs font-medium hover:underline text-muted-foreground group-hover:text-foreground transition-colors">
                               {p.player.nickname}
                             </Link>
-                            <span className="text-[9px] font-mono text-muted-foreground/60 leading-none mt-0.5">
-                              {p.kills} / {p.deaths} / {p.assists}
+                            <span className="text-[9px] font-mono text-muted-foreground/60 leading-none mt-0.5" title="Gol / Asist / Save / Puan">
+                              {p.kills} / {p.assists} / {p.deaths} / {p.points || 0}
                             </span>
                           </div>
                         </div>
@@ -291,13 +304,13 @@ export default async function Home() {
             )}
             {recentMatches.length > 5 && (
               <Dialog>
-                <DialogTrigger className="w-full py-3 text-xs font-bold tracking-wider text-primary bg-card/40 backdrop-blur hover:bg-card/60 transition-all shadow-sm border border-border/50 rounded-xl flex items-center justify-center gap-2 uppercase">
+                <DialogTrigger className="w-full py-3 text-xs font-bold tracking-wider text-blue-500 bg-card/40 backdrop-blur hover:bg-card/60 transition-all shadow-sm border border-border/50 rounded-xl flex items-center justify-center gap-2 uppercase">
                   Tüm Maçları Gör ({recentMatches.length} Maç)
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto bg-background/60 backdrop-blur-2xl border-primary/20 shadow-2xl shadow-primary/10 custom-scrollbar">
+                <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto bg-background/60 backdrop-blur-2xl border-blue-500/20 shadow-2xl shadow-blue-500/10 custom-scrollbar">
                   <DialogHeader className="pb-4 border-b border-border/50">
                     <DialogTitle className="text-2xl font-extrabold flex items-center gap-2">
-                      <Activity className="w-6 h-6 text-primary" />
+                      <Activity className="w-6 h-6 text-blue-500" />
                       Son Oynanan Maçlar Arşivi
                     </DialogTitle>
                   </DialogHeader>
@@ -308,7 +321,7 @@ export default async function Home() {
                           <div className="flex items-center gap-2">
                             <span className="text-muted-foreground font-medium">{match.date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                             {match.season && (
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 shrink-0">{match.season.name}</span>
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-500/10 text-blue-500 border border-blue-500/20 shrink-0">{match.season.name}</span>
                             )}
                           </div>
                           <span className={`font-black px-2 py-0.5 rounded text-[10px] shrink-0 ${match.winner === "BLUE" ? "bg-blue-500/10 text-blue-500 border border-blue-500/20" : "bg-red-500/10 text-red-500 border border-red-500/20"}`}>
@@ -325,11 +338,11 @@ export default async function Home() {
                                   {p.champion.substring(0, 2).toUpperCase()}
                                 </div>
                                 <div className="flex flex-col min-w-0">
-                                  <Link href={`/player/${p.player.nickname}?game=LOL`} className="truncate text-xs font-medium hover:underline text-muted-foreground group-hover:text-foreground transition-colors">
+                                  <Link href={`/player/${p.player.nickname}?game=ROCKET_LEAGUE`} className="truncate text-xs font-medium hover:underline text-muted-foreground group-hover:text-foreground transition-colors">
                                     {p.player.nickname}
                                   </Link>
-                                  <span className="text-[9px] font-mono text-muted-foreground/60 leading-none mt-0.5">
-                                    {p.kills} / {p.deaths} / {p.assists}
+                                  <span className="text-[9px] font-mono text-muted-foreground/60 leading-none mt-0.5" title="Gol / Asist / Save / Puan">
+                                    {p.kills} / {p.assists} / {p.deaths} / {p.points || 0}
                                   </span>
                                 </div>
                               </div>
@@ -346,11 +359,11 @@ export default async function Home() {
                                   {p.champion.substring(0, 2).toUpperCase()}
                                 </div>
                                 <div className="flex flex-col items-end min-w-0">
-                                  <Link href={`/player/${p.player.nickname}?game=LOL`} className="truncate text-xs font-medium hover:underline text-muted-foreground group-hover:text-foreground transition-colors">
+                                  <Link href={`/player/${p.player.nickname}?game=ROCKET_LEAGUE`} className="truncate text-xs font-medium hover:underline text-muted-foreground group-hover:text-foreground transition-colors">
                                     {p.player.nickname}
                                   </Link>
-                                  <span className="text-[9px] font-mono text-muted-foreground/60 leading-none mt-0.5">
-                                    {p.kills} / {p.deaths} / {p.assists}
+                                  <span className="text-[9px] font-mono text-muted-foreground/60 leading-none mt-0.5" title="Gol / Asist / Save / Puan">
+                                    {p.kills} / {p.assists} / {p.deaths} / {p.points || 0}
                                   </span>
                                 </div>
                               </div>

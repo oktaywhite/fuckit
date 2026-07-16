@@ -10,9 +10,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { createMatchAction } from "../actions";
 import { toast } from "sonner";
 import { Plus, Trash2, Shuffle } from "lucide-react";
-import { CHAMPIONS } from "@/lib/constants";
+import { CHAMPIONS, VALORANT_AGENTS } from "@/lib/constants";
+import { Game } from "@prisma/client";
 
-type PlayerSummary = { id: string; nickname: string; currentMmr: number };
+type PlayerSummary = {
+  id: string;
+  nickname: string;
+  gameStats: { game: string; currentMmr: number }[];
+};
 
 type ParticipantInput = {
   playerId: string;
@@ -20,15 +25,17 @@ type ParticipantInput = {
   kills: string;
   deaths: string;
   assists: string;
+  points: string;
 };
 
-export default function MatchForm({ players }: { players: PlayerSummary[] }) {
+export default function MatchForm({ players, activeSeasons }: { players: PlayerSummary[], activeSeasons: any[] }) {
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>(activeSeasons.length > 0 ? activeSeasons[0].id : "");
   const [winner, setWinner] = useState<"BLUE" | "RED">("BLUE");
   const [blueTeam, setBlueTeam] = useState<ParticipantInput[]>([
-    { playerId: "", champion: "", kills: "0", deaths: "0", assists: "0" }
+    { playerId: "", champion: "", kills: "0", deaths: "0", assists: "0", points: "0" }
   ]);
   const [redTeam, setRedTeam] = useState<ParticipantInput[]>([
-    { playerId: "", champion: "", kills: "0", deaths: "0", assists: "0" }
+    { playerId: "", champion: "", kills: "0", deaths: "0", assists: "0", points: "0" }
   ]);
   const [pending, setPending] = useState(false);
   const [isRandomDialogOpen, setIsRandomDialogOpen] = useState(false);
@@ -36,12 +43,12 @@ export default function MatchForm({ players }: { players: PlayerSummary[] }) {
 
   const handleAddBlue = () => {
     if (blueTeam.length >= 5) return;
-    setBlueTeam([...blueTeam, { playerId: "", champion: "", kills: "0", deaths: "0", assists: "0" }]);
+    setBlueTeam([...blueTeam, { playerId: "", champion: "", kills: "0", deaths: "0", assists: "0", points: "0" }]);
   };
 
   const handleAddRed = () => {
     if (redTeam.length >= 5) return;
-    setRedTeam([...redTeam, { playerId: "", champion: "", kills: "0", deaths: "0", assists: "0" }]);
+    setRedTeam([...redTeam, { playerId: "", champion: "", kills: "0", deaths: "0", assists: "0", points: "0" }]);
   };
 
   const handleRemoveBlue = (index: number) => {
@@ -68,15 +75,15 @@ export default function MatchForm({ players }: { players: PlayerSummary[] }) {
     const newBlueIds = shuffled.slice(0, half);
     const newRedIds = shuffled.slice(half);
 
-    const newBlue = newBlueIds.map(id => ({ playerId: id, champion: "", kills: "0", deaths: "0", assists: "0" }));
-    const newRed = newRedIds.map(id => ({ playerId: id, champion: "", kills: "0", deaths: "0", assists: "0" }));
+    const newBlue = newBlueIds.map(id => ({ playerId: id, champion: "", kills: "0", deaths: "0", assists: "0", points: "0" }));
+    const newRed = newRedIds.map(id => ({ playerId: id, champion: "", kills: "0", deaths: "0", assists: "0", points: "0" }));
 
-    if (newBlue.length === 0) newBlue.push({ playerId: "", champion: "", kills: "0", deaths: "0", assists: "0" });
-    if (newRed.length === 0) newRed.push({ playerId: "", champion: "", kills: "0", deaths: "0", assists: "0" });
+    if (newBlue.length === 0) newBlue.push({ playerId: "", champion: "", kills: "0", deaths: "0", assists: "0", points: "0" });
+    if (newRed.length === 0) newRed.push({ playerId: "", champion: "", kills: "0", deaths: "0", assists: "0", points: "0" });
 
     setBlueTeam(newBlue);
     setRedTeam(newRed);
-    
+
     setIsRandomDialogOpen(false);
     setSelectedForRandom([]);
     toast.success("Takımlar rastgele dağıtıldı!");
@@ -84,7 +91,7 @@ export default function MatchForm({ players }: { players: PlayerSummary[] }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Basit validasyon
     if (blueTeam.some(p => !p.playerId) || redTeam.some(p => !p.playerId)) {
       toast.error("Lütfen tüm satırlarda bir oyuncu seçin.");
@@ -96,7 +103,8 @@ export default function MatchForm({ players }: { players: PlayerSummary[] }) {
     const payload = {
       winner,
       blueTeam,
-      redTeam
+      redTeam,
+      seasonId: selectedSeasonId
     };
 
     const formData = new FormData();
@@ -110,6 +118,14 @@ export default function MatchForm({ players }: { players: PlayerSummary[] }) {
   };
 
   const availablePlayers = players;
+
+  const selectedSeason = activeSeasons.find(s => s.id === selectedSeasonId);
+  const game = selectedSeason ? selectedSeason.game : "LOL";
+
+  const getPlayerMmr = (p: PlayerSummary) => {
+    const stat = p.gameStats.find(s => s.game === game);
+    return stat ? stat.currentMmr : 1000;
+  };
 
   const renderTeam = (team: ParticipantInput[], setTeam: any, teamColor: "BLUE" | "RED") => (
     <div className={`space-y-4 p-4 rounded-xl border ${teamColor === "BLUE" ? "bg-blue-500/5 border-blue-500/20" : "bg-red-500/5 border-red-500/20"}`}>
@@ -126,8 +142,8 @@ export default function MatchForm({ players }: { players: PlayerSummary[] }) {
         <div key={index} className="flex flex-wrap gap-2 items-end border-b border-border/50 pb-4 last:border-0 last:pb-0">
           <div className="flex-1 min-w-[200px] space-y-1">
             <Label className="text-xs">Oyuncu</Label>
-            <Select 
-              value={participant.playerId} 
+            <Select
+              value={participant.playerId}
               onValueChange={(val) => {
                 const newTeam = [...team];
                 newTeam[index].playerId = val as string;
@@ -136,83 +152,144 @@ export default function MatchForm({ players }: { players: PlayerSummary[] }) {
             >
               <SelectTrigger className="bg-background/80">
                 <SelectValue placeholder="Oyuncu seç">
-                  {availablePlayers.find(p => p.id === participant.playerId) 
-                    ? `${availablePlayers.find(p => p.id === participant.playerId)?.nickname} (MMR: ${availablePlayers.find(p => p.id === participant.playerId)?.currentMmr})`
+                  {availablePlayers.find(p => p.id === participant.playerId)
+                    ? `${availablePlayers.find(p => p.id === participant.playerId)?.nickname} (MMR: ${getPlayerMmr(availablePlayers.find(p => p.id === participant.playerId)!)})`
                     : "Oyuncu seç"}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {availablePlayers.map(p => (
-                  <SelectItem key={p.id} value={p.id}>{p.nickname} (MMR: {p.currentMmr})</SelectItem>
+                  <SelectItem key={p.id} value={p.id}>{p.nickname} (MMR: {getPlayerMmr(p)})</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="w-[140px] space-y-1">
-            <Label className="text-xs">Şampiyon</Label>
-            <Select 
-              value={participant.champion} 
-              onValueChange={(val) => {
-                const newTeam = [...team];
-                newTeam[index].champion = val as string;
-                setTeam(newTeam);
-              }}
-            >
-              <SelectTrigger className="bg-background/80">
-                <SelectValue placeholder="Seç">
-                  {participant.champion || "Seç"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {CHAMPIONS.map(champ => (
-                  <SelectItem key={champ} value={champ}>{champ}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-[60px] space-y-1">
-            <Label className="text-xs">K</Label>
-            <Input 
-              type="number" min="0" 
-              value={participant.kills}
-              onChange={(e) => {
-                const newTeam = [...team];
-                newTeam[index].kills = e.target.value;
-                setTeam(newTeam);
-              }}
-              className="bg-background/80 px-2"
-            />
-          </div>
-          <div className="w-[60px] space-y-1">
-            <Label className="text-xs">D</Label>
-            <Input 
-              type="number" min="0" 
-              value={participant.deaths}
-              onChange={(e) => {
-                const newTeam = [...team];
-                newTeam[index].deaths = e.target.value;
-                setTeam(newTeam);
-              }}
-              className="bg-background/80 px-2"
-            />
-          </div>
-          <div className="w-[60px] space-y-1">
-            <Label className="text-xs">A</Label>
-            <Input 
-              type="number" min="0" 
-              value={participant.assists}
-              onChange={(e) => {
-                const newTeam = [...team];
-                newTeam[index].assists = e.target.value;
-                setTeam(newTeam);
-              }}
-              className="bg-background/80 px-2"
-            />
-          </div>
-          <Button 
-            type="button" 
-            variant="ghost" 
-            size="icon" 
+          {game !== "ROCKET_LEAGUE" && (
+            <div className="w-[140px] space-y-1">
+              <Label className="text-xs">{game === "VALORANT" ? "Ajan" : "Şampiyon"}</Label>
+              <Select
+                value={participant.champion}
+                onValueChange={(val) => {
+                  const newTeam = [...team];
+                  newTeam[index].champion = val as string;
+                  setTeam(newTeam);
+                }}
+              >
+                <SelectTrigger className="bg-background/80">
+                  <SelectValue placeholder="Seç">
+                    {participant.champion || "Seç"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {(game === "VALORANT" ? VALORANT_AGENTS : CHAMPIONS).map(champ => (
+                    <SelectItem key={champ} value={champ}>{champ}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {game === "ROCKET_LEAGUE" ? (
+            <>
+              <div className="w-[70px] space-y-1">
+                <Label className="text-xs">Puan</Label>
+                <Input
+                  type="number" min="0"
+                  value={participant.points}
+                  onChange={(e) => {
+                    const newTeam = [...team];
+                    newTeam[index].points = e.target.value;
+                    setTeam(newTeam);
+                  }}
+                  className="bg-background/80 px-2"
+                />
+              </div>
+              <div className="w-[60px] space-y-1">
+                <Label className="text-xs">Gol</Label>
+                <Input
+                  type="number" min="0"
+                  value={participant.kills}
+                  onChange={(e) => {
+                    const newTeam = [...team];
+                    newTeam[index].kills = e.target.value;
+                    setTeam(newTeam);
+                  }}
+                  className="bg-background/80 px-2"
+                />
+              </div>
+              <div className="w-[60px] space-y-1">
+                <Label className="text-xs">Asist</Label>
+                <Input
+                  type="number" min="0"
+                  value={participant.assists}
+                  onChange={(e) => {
+                    const newTeam = [...team];
+                    newTeam[index].assists = e.target.value;
+                    setTeam(newTeam);
+                  }}
+                  className="bg-background/80 px-2"
+                />
+              </div>
+              <div className="w-[60px] space-y-1">
+                <Label className="text-xs">Save</Label>
+                <Input
+                  type="number" min="0"
+                  value={participant.deaths}
+                  onChange={(e) => {
+                    const newTeam = [...team];
+                    newTeam[index].deaths = e.target.value;
+                    setTeam(newTeam);
+                  }}
+                  className="bg-background/80 px-2"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="w-[60px] space-y-1">
+                <Label className="text-xs">K</Label>
+                <Input
+                  type="number" min="0"
+                  value={participant.kills}
+                  onChange={(e) => {
+                    const newTeam = [...team];
+                    newTeam[index].kills = e.target.value;
+                    setTeam(newTeam);
+                  }}
+                  className="bg-background/80 px-2"
+                />
+              </div>
+              <div className="w-[60px] space-y-1">
+                <Label className="text-xs">D</Label>
+                <Input
+                  type="number" min="0"
+                  value={participant.deaths}
+                  onChange={(e) => {
+                    const newTeam = [...team];
+                    newTeam[index].deaths = e.target.value;
+                    setTeam(newTeam);
+                  }}
+                  className="bg-background/80 px-2"
+                />
+              </div>
+              <div className="w-[60px] space-y-1">
+                <Label className="text-xs">A</Label>
+                <Input
+                  type="number" min="0"
+                  value={participant.assists}
+                  onChange={(e) => {
+                    const newTeam = [...team];
+                    newTeam[index].assists = e.target.value;
+                    setTeam(newTeam);
+                  }}
+                  className="bg-background/80 px-2"
+                />
+              </div>
+            </>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
             className="text-red-400 hover:text-red-500 hover:bg-red-500/10 mb-[2px]"
             onClick={() => teamColor === "BLUE" ? handleRemoveBlue(index) : handleRemoveRed(index)}
             disabled={team.length <= 1}
@@ -228,8 +305,25 @@ export default function MatchForm({ players }: { players: PlayerSummary[] }) {
     <Card className="bg-card/50 backdrop-blur">
       <CardContent className="p-6">
         <form onSubmit={handleSubmit} className="space-y-8">
-          
+
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+            <div className="flex flex-col space-y-2">
+              <Label className="text-lg font-semibold">Sezon (Oyun)</Label>
+              <Select value={selectedSeasonId} onValueChange={(val) => setSelectedSeasonId(val || "")}>
+                <SelectTrigger className="w-[200px] bg-background/80">
+                  <SelectValue placeholder="Sezon Seçin">
+                    {selectedSeason ? `${selectedSeason.name} (${selectedSeason.game})` : "Sezon Seçin"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {activeSeasons.length === 0 && <SelectItem value="" disabled>Aktif Sezon Yok</SelectItem>}
+                  {activeSeasons.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name} ({s.game})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex flex-col space-y-2">
               <Label className="text-lg font-semibold">Kazanan Takım</Label>
               <div className="flex gap-4">
@@ -251,7 +345,7 @@ export default function MatchForm({ players }: { players: PlayerSummary[] }) {
                 </Button>
               </div>
             </div>
-            
+
             <Dialog open={isRandomDialogOpen} onOpenChange={setIsRandomDialogOpen}>
               <DialogTrigger render={<Button type="button" variant="secondary" className="gap-2" />}>
                 <Shuffle className="w-4 h-4" /> Takımları Karma Dağıt
@@ -264,8 +358,8 @@ export default function MatchForm({ players }: { players: PlayerSummary[] }) {
                   {players.map(p => {
                     const isSelected = selectedForRandom.includes(p.id);
                     return (
-                      <div 
-                        key={p.id} 
+                      <div
+                        key={p.id}
                         onClick={() => {
                           if (isSelected) {
                             setSelectedForRandom(prev => prev.filter(id => id !== p.id));
@@ -273,12 +367,11 @@ export default function MatchForm({ players }: { players: PlayerSummary[] }) {
                             setSelectedForRandom(prev => [...prev, p.id]);
                           }
                         }}
-                        className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
-                          isSelected ? "bg-primary/10 border-primary shadow-sm" : "bg-card/40 hover:bg-muted/50 border-border/50"
-                        }`}
+                        className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${isSelected ? "bg-primary/10 border-primary shadow-sm" : "bg-card/40 hover:bg-muted/50 border-border/50"
+                          }`}
                       >
                         <span className={`font-semibold ${isSelected ? "text-primary" : ""}`}>{p.nickname}</span>
-                        <span className="text-sm text-muted-foreground font-mono">MMR: {p.currentMmr}</span>
+                        <span className="text-sm text-muted-foreground font-mono">MMR: {getPlayerMmr(p)}</span>
                       </div>
                     )
                   })}

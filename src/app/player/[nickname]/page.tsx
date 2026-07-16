@@ -8,26 +8,34 @@ import { Badge } from "@/components/ui/badge";
 import { Trophy, Swords, Medal, TrendingUp, ChevronRight, Info, Users } from "lucide-react";
 import Link from "next/link";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-export default async function PlayerProfilePage({
-  params,
-}: {
+export default async function PlayerProfilePage(props: {
   params: Promise<{ nickname: string }>;
+  searchParams: Promise<{ game?: string }>;
 }) {
-  const resolvedParams = await params;
+  const resolvedParams = await props.params;
+  const searchParams = await Promise.resolve(props.searchParams);
+  const gameParam = searchParams?.game || "LOL";
+  const game = (gameParam === "ROCKET_LEAGUE" || gameParam === "VALORANT") ? gameParam : "LOL";
   const decodedNickname = decodeURIComponent(resolvedParams.nickname);
 
   const player = await prisma.player.findUnique({
     where: { nickname: decodedNickname },
     include: {
+      gameStats: {
+        where: { game: game as any }
+      },
       seasonStats: {
+        where: { season: { game: game as any } },
         include: { season: true },
         orderBy: { season: { endDate: "desc" } }
       },
       matchParticipants: {
+        where: { match: { game: game as any } },
         include: {
           match: {
             include: {
@@ -50,23 +58,30 @@ export default async function PlayerProfilePage({
     notFound();
   }
 
-  const rank = getRankFromMmr(player.currentMmr);
-  const totalMatches = player.wins + player.losses;
-  const winRate = totalMatches > 0 ? Math.round((player.wins / totalMatches) * 100) : 0;
+  const gameStat = player.gameStats[0] || { currentMmr: 1000, peakMmr: 1000, wins: 0, losses: 0 };
+  const currentMmr = gameStat.currentMmr;
+  const peakMmr = gameStat.peakMmr;
+  const wins = gameStat.wins;
+  const losses = gameStat.losses;
+
+  const rank = getRankFromMmr(currentMmr, game as string);
+  const totalMatches = wins + losses;
+  const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
 
   // Active Leaderboard Rank
-  const allPlayers = await prisma.player.findMany({
+  const allGameStats = await prisma.playerGameStat.findMany({
+    where: { game: game as any },
     orderBy: { currentMmr: 'desc' },
-    select: { id: true }
+    select: { playerId: true }
   });
-  const currentRankIndex = allPlayers.findIndex((p: any) => p.id === player.id);
+  const currentRankIndex = allGameStats.findIndex((p: any) => p.playerId === player.id);
   const currentLeaderboardRank = currentRankIndex !== -1 ? currentRankIndex + 1 : null;
 
-  const rankProgression = getNextRank(player.currentMmr);
+  const rankProgression = getNextRank(currentMmr, game as string);
 
   // Past Season Champions
   const pastSeasons = await (prisma as any).season.findMany({
-    where: { isActive: false },
+    where: { isActive: false, game: game as any },
     include: {
       stats: {
         orderBy: { finalMmr: 'desc' },
@@ -78,17 +93,18 @@ export default async function PlayerProfilePage({
 
   // --- Calculate per-match MMR changes by replaying the timeline ---
   const activeSeason = await (prisma as any).season.findFirst({
-    where: { isActive: true },
+    where: { isActive: true, game: game as any },
     orderBy: { startDate: "desc" },
   });
 
   const allMatches = await prisma.match.findMany({
-    where: activeSeason ? { seasonId: activeSeason.id } : {},
+    where: activeSeason ? { seasonId: activeSeason.id, game: game as any } : { game: game as any },
     orderBy: { date: "asc" },
     include: { participants: true },
   });
 
   const allAdjustments = await (prisma as any).mmrAdjustment.findMany({
+    where: { game: game as any },
     orderBy: { date: "asc" },
   });
 
@@ -183,7 +199,18 @@ export default async function PlayerProfilePage({
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Profile Header */}
-      <div className="flex flex-col md:flex-row items-center md:items-start gap-8 bg-card/50 p-8 rounded-xl border border-border/50 backdrop-blur">
+      <div className="relative flex flex-col md:flex-row items-center md:items-start gap-8 bg-card/50 p-8 rounded-xl border border-border/50 backdrop-blur">
+        <div className="absolute top-4 right-4 hidden sm:flex items-center gap-2">
+          <Link href={`/player/${decodedNickname}?game=LOL`}>
+            <Button variant={game === "LOL" ? "default" : "outline"} size="sm" className="rounded-full h-6 px-3 text-[10px] font-bold uppercase">LoL</Button>
+          </Link>
+          <Link href={`/player/${decodedNickname}?game=VALORANT`}>
+            <Button variant={game === "VALORANT" ? "default" : "outline"} size="sm" className="rounded-full h-6 px-3 text-[10px] font-bold uppercase">Valorant</Button>
+          </Link>
+          <Link href={`/player/${decodedNickname}?game=ROCKET_LEAGUE`}>
+            <Button variant={game === "ROCKET_LEAGUE" ? "default" : "outline"} size="sm" className="rounded-full h-6 px-3 text-[10px] font-bold uppercase">Rocket League</Button>
+          </Link>
+        </div>
         <Avatar className="h-32 w-32 border-4 border-primary/20">
           <AvatarImage src={player.avatar || undefined} alt={player.nickname} />
           <AvatarFallback className="bg-primary/10 text-primary text-4xl font-bold">
@@ -242,14 +269,14 @@ export default async function PlayerProfilePage({
               <span className="text-xs text-muted-foreground uppercase font-semibold">Current MMR</span>
               <span className="text-xl font-bold font-mono text-primary flex items-center gap-2">
                 <Trophy className="w-4 h-4" />
-                {player.currentMmr}
+                {currentMmr}
               </span>
             </div>
             <div className="flex flex-col items-center md:items-start bg-background/50 px-4 py-2 rounded-lg border border-border/50">
               <span className="text-xs text-muted-foreground uppercase font-semibold">Peak MMR</span>
               <span className="text-xl font-bold font-mono flex items-center gap-2">
                 <TrendingUp className="w-4 h-4" />
-                {player.peakMmr}
+                {peakMmr}
               </span>
             </div>
 
@@ -257,7 +284,7 @@ export default async function PlayerProfilePage({
               <div className="flex flex-col items-center md:items-start bg-background/50 px-4 py-2 rounded-lg border border-border/50">
                 <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">En İyi İkili</span>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <Link href={`/player/${bestDuo.nickname}`} className="group/duo flex items-center gap-1.5">
+                  <Link href={`/player/${bestDuo.nickname}?game=${game}`} className="group/duo flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5 text-primary" />
                     <span className="text-sm font-bold group-hover/duo:underline transition-all">{bestDuo.nickname}</span>
                   </Link>
@@ -276,7 +303,7 @@ export default async function PlayerProfilePage({
                   </span>
                   {rankProgression.next && (
                     <span className="text-xs font-bold text-muted-foreground">
-                      {player.currentMmr} / {rankProgression.nextMin}
+                      {currentMmr} / {rankProgression.nextMin}
                     </span>
                   )}
                 </div>
@@ -301,16 +328,17 @@ export default async function PlayerProfilePage({
                   </DialogTitle>
                 </DialogHeader>
                 <div className="py-4 flex flex-col gap-2">
-                  {(Object.keys(RANK_THRESHOLDS) as import("@/lib/rank").RankTier[]).map((r) => {
-                    const isCurrent = r === rankProgression.current;
+                  {RANK_THRESHOLDS.map((threshold, index) => {
+                    const rankName = getRankFromMmr(threshold, game as string);
+                    const isCurrent = rankName === rankProgression.current;
                     return (
-                      <div key={r} className={cn("flex items-center justify-between p-2 rounded-lg border", isCurrent ? "bg-primary/10 border-primary/30" : "bg-card/30 border-border/50")}>
+                      <div key={index} className={cn("flex items-center justify-between p-2 rounded-lg border", isCurrent ? "bg-primary/10 border-primary/30" : "bg-card/30 border-border/50")}>
                         <div className="flex items-center gap-3">
-                          <div className={cn("w-2 h-2 rounded-full", getRankStyle(r).match(/text-[a-z]+-?\d*/)?.[0]?.replace('text-', 'bg-') || "bg-primary")} />
-                          <span className={cn("font-bold text-sm", isCurrent ? "text-primary" : "")}>{r}</span>
+                          <div className={cn("w-2 h-2 rounded-full", getRankStyle(rankName).match(/text-[a-z]+-?\d*/)?.[0]?.replace('text-', 'bg-') || "bg-primary")} />
+                          <span className={cn("font-bold text-sm", isCurrent ? "text-primary" : "")}>{rankName}</span>
                           {isCurrent && <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-bold uppercase">Mevcut</span>}
                         </div>
-                        <span className="font-mono font-bold text-sm text-muted-foreground">{RANK_THRESHOLDS[r]} MMR</span>
+                        <span className="font-mono font-bold text-sm text-muted-foreground">{threshold} MMR</span>
                       </div>
                     );
                   })}
@@ -330,7 +358,7 @@ export default async function PlayerProfilePage({
           <CardContent>
             <div className="text-3xl font-bold">{winRate}%</div>
             <div className="text-sm text-muted-foreground mt-1">
-              {player.wins} Wins / {player.losses} Losses
+              {wins} Wins / {losses} Losses
             </div>
           </CardContent>
         </Card>
@@ -394,7 +422,7 @@ export default async function PlayerProfilePage({
                           </div>
                           <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
                             <span className="text-muted-foreground font-medium">Ulaşılan Seviye</span>
-                            <div className={cn("px-2 py-0.5 h-5 text-[10px] rounded-full font-bold border flex items-center justify-center uppercase w-fit", getRankStyle(getRankFromMmr(stat.finalMmr)))}>{getRankFromMmr(stat.finalMmr)}</div>
+                            <div className={cn("px-2 py-0.5 h-5 text-[10px] rounded-full font-bold border flex items-center justify-center uppercase w-fit", getRankStyle(getRankFromMmr(stat.finalMmr, stat.season.game)))}>{getRankFromMmr(stat.finalMmr, stat.season.game)}</div>
                           </div>
                           <div className="flex justify-between items-center text-sm">
                             <span className="text-muted-foreground font-medium">Toplam Skor</span>
@@ -422,7 +450,7 @@ export default async function PlayerProfilePage({
                     <span className="text-muted-foreground font-medium">MMR</span>
                     <span className="font-bold font-mono text-primary flex items-center gap-1"><Trophy className="w-3 h-3" /> {stat.finalMmr}</span>
                   </div>
-                  <div className={cn("px-1.5 py-0 h-4 text-[9px] rounded-full font-bold border flex items-center justify-center uppercase mt-1 w-fit", getRankStyle(getRankFromMmr(stat.finalMmr)))}>{getRankFromMmr(stat.finalMmr)}</div>
+                  <div className={cn("px-1.5 py-0 h-4 text-[9px] rounded-full font-bold border flex items-center justify-center uppercase mt-1 w-fit", getRankStyle(getRankFromMmr(stat.finalMmr, stat.season.game)))}>{getRankFromMmr(stat.finalMmr, stat.season.game)}</div>
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-muted-foreground font-medium">Skor</span>
                     <span className="font-bold text-[10px]">
@@ -479,8 +507,8 @@ export default async function PlayerProfilePage({
                   <div className="flex items-center gap-4 flex-1">
                     <div className="flex flex-col">
                       <span className="font-semibold text-foreground">{mp.champion}</span>
-                      <span className="text-sm font-mono text-muted-foreground">
-                        {mp.kills} / {mp.deaths} / {mp.assists}
+                      <span className="text-sm font-mono text-muted-foreground" title={match.game === "ROCKET_LEAGUE" ? "Gol / Asist / Save / Puan" : "KDA"}>
+                        {match.game === "ROCKET_LEAGUE" ? `${mp.kills} / ${mp.assists} / ${mp.deaths} / ${mp.points || 0}` : `${mp.kills} / ${mp.deaths} / ${mp.assists}`}
                       </span>
                     </div>
                   </div>
@@ -510,7 +538,7 @@ export default async function PlayerProfilePage({
                           <div className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-black shrink-0 bg-blue-500/10 text-blue-500 border border-blue-500/20" title={p.champion}>
                             {p.champion.substring(0, 2).toUpperCase()}
                           </div>
-                          <Link href={`/player/${p.player.nickname}`} className={`truncate flex-1 hover:underline ${p.player.nickname === decodedNickname ? "text-foreground font-bold" : "text-muted-foreground"}`}>
+                          <Link href={`/player/${p.player.nickname}?game=${game}`} className={`truncate flex-1 hover:underline ${p.player.nickname === decodedNickname ? "text-foreground font-bold" : "text-muted-foreground"}`}>
                             {p.player.nickname}
                           </Link>
                         </div>
@@ -528,7 +556,7 @@ export default async function PlayerProfilePage({
                           <div className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-black shrink-0 bg-red-500/10 text-red-500 border border-red-500/20" title={p.champion}>
                             {p.champion.substring(0, 2).toUpperCase()}
                           </div>
-                          <Link href={`/player/${p.player.nickname}`} className={`truncate flex-1 hover:underline ${p.player.nickname === decodedNickname ? "text-foreground font-bold" : "text-muted-foreground"}`}>
+                          <Link href={`/player/${p.player.nickname}?game=${game}`} className={`truncate flex-1 hover:underline ${p.player.nickname === decodedNickname ? "text-foreground font-bold" : "text-muted-foreground"}`}>
                             {p.player.nickname}
                           </Link>
                         </div>

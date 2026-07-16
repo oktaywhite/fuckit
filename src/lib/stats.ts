@@ -1,65 +1,64 @@
 import { prisma } from "./prisma";
 import { calculateBaseMmrChange, calculateFinalMmr } from "./mmr";
+import { Game } from "@prisma/client";
 
 export async function recalculateAllPlayerStats() {
-  const activeSeason = await prisma.season.findFirst({
-    where: { isActive: true },
-    orderBy: { startDate: "desc" },
-  });
-
-  // 1. Reset all players to default stats
-  await prisma.player.updateMany({
-    data: {
-      currentMmr: 1000,
-      peakMmr: 1000,
-      wins: 0,
-      losses: 0,
-    },
-  });
-
-  // 2. Fetch all matches chronologically (filter by active season if exists)
-  const matches = await prisma.match.findMany({
-    where: activeSeason ? { seasonId: activeSeason.id } : {},
+  // 1. Fetch active seasons per game
+  const games = Object.values(Game);
+  
+  // We need to fetch all matches chronologically
+  const allMatches = await prisma.match.findMany({
     orderBy: { date: "asc" },
     include: {
       participants: true,
+      season: true
     },
   });
 
-  // Fetch ALL adjustments (not filtered by date so manual edits always apply)
   const adjustments = await (prisma as any).mmrAdjustment.findMany({
     orderBy: { date: "asc" },
   });
 
-  // 3. We need to track player states in memory during recalculation to compute streaks
-  // since querying DB for every match is slow.
+  const allPlayers = await prisma.player.findMany();
+
+  // Track player states per game in memory
+  // Map key: `${playerId}-${game}`
   const playersMap = new Map<
     string,
-    { mmr: number; peakMmr: number; wins: number; losses: number; winStreak: number; lossStreak: number }
+    { mmr: number; peakMmr: number; wins: number; losses: number; winStreak: number; lossStreak: number; game: Game }
   >();
 
-  const getPlayerState = (id: string) => {
-    if (!playersMap.has(id)) {
-      playersMap.set(id, { mmr: 1000, peakMmr: 1000, wins: 0, losses: 0, winStreak: 0, lossStreak: 0 });
+  // Initialize map with all players for all games with default values
+  for (const p of allPlayers) {
+    for (const game of games) {
+      const key = `${p.id}-${game}`;
+      playersMap.set(key, { mmr: 1000, peakMmr: 1000, wins: 0, losses: 0, winStreak: 0, lossStreak: 0, game });
     }
-    return playersMap.get(id)!;
+  }
+
+  const getPlayerState = (id: string, game: Game) => {
+    const key = `${id}-${game}`;
+    if (!playersMap.has(key)) {
+      playersMap.set(key, { mmr: 1000, peakMmr: 1000, wins: 0, losses: 0, winStreak: 0, lossStreak: 0, game });
+    }
+    return playersMap.get(key)!;
   };
 
-  // 4. Merge timeline
+  // Merge timeline
   type TimelineEvent =
-    | { type: "MATCH"; date: Date; data: any }
-    | { type: "ADJUSTMENT"; date: Date; data: any };
+    | { type: "MATCH"; date: Date; data: any; game: Game }
+    | { type: "ADJUSTMENT"; date: Date; data: any; game: Game };
 
   const timeline: TimelineEvent[] = [
-    ...matches.map((m: any) => ({ type: "MATCH" as const, date: m.date, data: m })),
-    ...adjustments.map((a: any) => ({ type: "ADJUSTMENT" as const, date: a.date, data: a }))
+    ...allMatches.map((m: any) => ({ type: "MATCH" as const, date: m.date, data: m, game: m.game as Game })),
+    ...adjustments.map((a: any) => ({ type: "ADJUSTMENT" as const, date: a.date, data: a, game: a.game as Game }))
   ].sort((a, b) => a.date.getTime() - b.date.getTime());
 
-  // 5. Iterate through timeline and apply MMR changes
+  // Iterate through timeline and apply MMR changes per game
   for (const event of timeline) {
     if (event.type === "ADJUSTMENT") {
       const adj = event.data;
-      const state = getPlayerState(adj.playerId);
+      const state = getPlayerState(adj.playerId, event.game);
       state.mmr += adj.amount;
       if (state.mmr > state.peakMmr) state.peakMmr = state.mmr;
       continue;
@@ -72,9 +71,9 @@ export async function recalculateAllPlayerStats() {
     if (blueTeam.length === 0 || redTeam.length === 0) continue;
 
     const blueTeamAvgMmr =
-      blueTeam.reduce((acc: number, p: any) => acc + getPlayerState(p.playerId).mmr, 0) / blueTeam.length;
+      blueTeam.reduce((acc: number, p: any) => acc + getPlayerState(p.playerId, event.game).mmr, 0) / blueTeam.length;
     const redTeamAvgMmr =
-      redTeam.reduce((acc: number, p: any) => acc + getPlayerState(p.playerId).mmr, 0) / redTeam.length;
+      redTeam.reduce((acc: number, p: any) => acc + getPlayerState(p.playerId, event.game).mmr, 0) / redTeam.length;
 
     const { blueMmrChange, redMmrChange } = calculateBaseMmrChange(
       blueTeamAvgMmr,
@@ -84,7 +83,7 @@ export async function recalculateAllPlayerStats() {
 
     // Update each participant
     for (const participant of match.participants) {
-      const state = getPlayerState(participant.playerId);
+      const state = getPlayerState(participant.playerId, event.game);
       const isWinner = participant.team === match.winner;
       const baseChange = participant.team === "BLUE" ? blueMmrChange : redMmrChange;
 
@@ -107,18 +106,24 @@ export async function recalculateAllPlayerStats() {
     }
   }
 
-  // 5. Bulk update players in DB
-  const updatePromises = Array.from(playersMap.entries()).map(([id, state]) =>
-    prisma.player.update({
-      where: { id },
-      data: {
-        currentMmr: state.mmr,
-        peakMmr: state.peakMmr,
-        wins: state.wins,
-        losses: state.losses,
-      },
-    })
-  );
+  // Clear existing PlayerGameStat table completely and repopulate
+  await prisma.playerGameStat.deleteMany({});
 
-  await Promise.all(updatePromises);
+  const createData = Array.from(playersMap.entries()).map(([key, state]) => {
+    const [playerId, game] = key.split("-");
+    return {
+      playerId,
+      game: game as Game,
+      currentMmr: state.mmr,
+      peakMmr: state.peakMmr,
+      wins: state.wins,
+      losses: state.losses,
+    };
+  });
+
+  if (createData.length > 0) {
+    await prisma.playerGameStat.createMany({
+      data: createData,
+    });
+  }
 }

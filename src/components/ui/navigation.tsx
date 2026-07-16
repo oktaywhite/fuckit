@@ -11,7 +11,9 @@ export function Navigation() {
   const pathname = usePathname();
 
   const links = [
-    { href: "/", label: "Ana Sayfa", icon: Home },
+    { href: "/", label: "LoL", icon: Home },
+    { href: "/rocket-league", label: "Rocket League", icon: Home },
+    { href: "/valorant", label: "Valorant", icon: Home },
     { href: "/leaderboard", label: "Sıralama", icon: Trophy },
     { href: "/matches", label: "Maçlar", icon: Swords },
     { href: "/players", label: "Oyuncular", icon: Users },

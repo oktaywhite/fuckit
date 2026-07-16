@@ -3,16 +3,22 @@ import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import { MatchFilter } from "@/components/MatchFilter";
 import { SearchX } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
-export default async function MatchesPage({ searchParams }: { searchParams: Promise<{ player?: string, season?: string, date?: string }> }) {
+export default async function MatchesPage({ searchParams }: { searchParams: Promise<{ player?: string, season?: string, date?: string, game?: string }> }) {
   const resolvedParams = await searchParams;
   const { player, season, date } = resolvedParams;
+  const gameParam = resolvedParams?.game || "LOL";
+  const game = (gameParam === "ROCKET_LEAGUE" || gameParam === "VALORANT") ? gameParam : "LOL";
 
-  const seasons = await (prisma as any).season.findMany({ orderBy: { startDate: 'desc' } });
+  const seasons = await (prisma as any).season.findMany({ 
+    where: { game: game as any },
+    orderBy: { startDate: 'desc' } 
+  });
 
-  const whereClause: any = {};
+  const whereClause: any = { game: game as any };
   if (season) whereClause.seasonId = season;
   if (player) {
     whereClause.participants = {
@@ -51,9 +57,22 @@ export default async function MatchesPage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="space-y-8 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-4xl mx-auto mt-8">
-      <div className="space-y-2">
-        <h1 className="text-4xl font-extrabold tracking-tight">Maç Arşivi</h1>
-        <p className="text-muted-foreground text-lg">Tüm maç geçmişini detaylı olarak filtreleyin ve inceleyin.</p>
+      <div className="flex flex-col md:flex-row md:items-end justify-between space-y-4 md:space-y-0">
+        <div className="space-y-2">
+          <h1 className="text-4xl font-extrabold tracking-tight">Maç Arşivi</h1>
+          <p className="text-muted-foreground text-lg">Tüm maç geçmişini detaylı olarak filtreleyin ve inceleyin.</p>
+        </div>
+        <div className="flex gap-2 bg-muted/30 p-1.5 rounded-xl border border-border/50">
+          <Link href="?game=LOL">
+            <Button variant={game === "LOL" ? "default" : "ghost"} size="sm" className="rounded-lg">LoL</Button>
+          </Link>
+          <Link href="?game=ROCKET_LEAGUE">
+            <Button variant={game === "ROCKET_LEAGUE" ? "default" : "ghost"} size="sm" className="rounded-lg">Rocket League</Button>
+          </Link>
+          <Link href="?game=VALORANT">
+            <Button variant={game === "VALORANT" ? "default" : "ghost"} size="sm" className="rounded-lg">Valorant</Button>
+          </Link>
+        </div>
       </div>
 
       <MatchFilter seasons={seasons} />
@@ -93,11 +112,11 @@ export default async function MatchesPage({ searchParams }: { searchParams: Prom
                         {p.champion.substring(0, 2).toUpperCase()}
                       </div>
                       <div className="flex flex-col min-w-0 flex-1">
-                        <Link href={`/player/${p.player.nickname}`} className="truncate text-sm font-semibold hover:underline text-foreground/80 group-hover/player:text-foreground transition-colors">
+                        <Link href={`/player/${p.player.nickname}?game=${game}`} className="truncate text-sm font-semibold hover:underline text-foreground/80 group-hover/player:text-foreground transition-colors">
                           {p.player.nickname}
                         </Link>
-                        <span className="text-[10px] font-mono font-medium text-muted-foreground mt-0.5">
-                          {p.kills} / {p.deaths} / {p.assists}
+                        <span className="text-[10px] font-mono font-medium text-muted-foreground mt-0.5" title={game === "ROCKET_LEAGUE" ? "Gol / Asist / Save / Puan" : "KDA"}>
+                          {game === "ROCKET_LEAGUE" ? `${p.kills} / ${p.assists} / ${p.deaths} / ${p.points || 0}` : `${p.kills} / ${p.deaths} / ${p.assists}`}
                         </span>
                       </div>
                     </div>
@@ -116,11 +135,11 @@ export default async function MatchesPage({ searchParams }: { searchParams: Prom
                         {p.champion.substring(0, 2).toUpperCase()}
                       </div>
                       <div className="flex flex-col items-end min-w-0 flex-1">
-                        <Link href={`/player/${p.player.nickname}`} className="truncate text-sm font-semibold hover:underline text-foreground/80 group-hover/player:text-foreground transition-colors">
+                        <Link href={`/player/${p.player.nickname}?game=${game}`} className="truncate text-sm font-semibold hover:underline text-foreground/80 group-hover/player:text-foreground transition-colors">
                           {p.player.nickname}
                         </Link>
-                        <span className="text-[10px] font-mono font-medium text-muted-foreground mt-0.5">
-                          {p.kills} / {p.deaths} / {p.assists}
+                        <span className="text-[10px] font-mono font-medium text-muted-foreground mt-0.5" title={game === "ROCKET_LEAGUE" ? "Gol / Asist / Save / Puan" : "KDA"}>
+                          {game === "ROCKET_LEAGUE" ? `${p.kills} / ${p.assists} / ${p.deaths} / ${p.points || 0}` : `${p.kills} / ${p.deaths} / ${p.assists}`}
                         </span>
                       </div>
                     </div>

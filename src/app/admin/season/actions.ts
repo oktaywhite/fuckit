@@ -2,22 +2,28 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { Game } from "@prisma/client";
 
 export async function endSeasonAction(formData: FormData) {
   const seasonId = formData.get("seasonId") as string;
   if (!seasonId) return;
 
-  // 1. Fetch all current players
-  const players = await prisma.player.findMany();
+  const season = await (prisma as any).season.findUnique({ where: { id: seasonId } });
+  if (!season) return;
+
+  // 1. Fetch all current players' game stats for this season's game
+  const gameStats = await prisma.playerGameStat.findMany({
+    where: { game: season.game as Game }
+  });
 
   // 2. Create PlayerSeasonStat for each player
-  const seasonStats = players.map((p: any) => ({
-    playerId: p.id,
+  const seasonStats = gameStats.map((stat) => ({
+    playerId: stat.playerId,
     seasonId: seasonId,
-    finalMmr: p.currentMmr,
-    peakMmr: p.peakMmr,
-    wins: p.wins,
-    losses: p.losses,
+    finalMmr: stat.currentMmr,
+    peakMmr: stat.peakMmr,
+    wins: stat.wins,
+    losses: stat.losses,
   }));
 
   if (seasonStats.length > 0) {
@@ -26,8 +32,9 @@ export async function endSeasonAction(formData: FormData) {
     });
   }
 
-  // 3. Reset all players
-  await prisma.player.updateMany({
+  // 3. Reset all players' stats for this game
+  await prisma.playerGameStat.updateMany({
+    where: { game: season.game as Game },
     data: {
       currentMmr: 1000,
       peakMmr: 1000,
@@ -46,6 +53,8 @@ export async function endSeasonAction(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/rocket-league");
+  revalidatePath("/valorant");
   revalidatePath("/admin/season");
   revalidatePath("/players");
   revalidatePath("/leaderboard");
@@ -54,6 +63,7 @@ export async function endSeasonAction(formData: FormData) {
 export async function startSeasonAction(formData: FormData) {
   const name = formData.get("name") as string;
   const daysStr = formData.get("days") as string;
+  const game = formData.get("game") as string || "LOL";
   
   if (!name || !daysStr) return;
   
@@ -65,6 +75,7 @@ export async function startSeasonAction(formData: FormData) {
   await (prisma as any).season.create({
     data: {
       name,
+      game: game as Game,
       isActive: true,
       startDate: new Date(),
       endDate
@@ -72,6 +83,8 @@ export async function startSeasonAction(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/rocket-league");
+  revalidatePath("/valorant");
   revalidatePath("/admin/season");
 }
 

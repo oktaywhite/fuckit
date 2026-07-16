@@ -7,10 +7,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Game {
+  LOL
+  ROCKET_LEAGUE
+  VALORANT
+}
+
 model Player {
   id         String   @id @default(cuid())
   nickname   String   @unique
   avatar     String?
+  // Kept for backwards compatibility for now, but not actively used for game MMR. We'll transition to gameStats.
   currentMmr Int      @default(1000)
   peakMmr    Int      @default(1000)
   wins       Int      @default(0)
@@ -21,11 +28,27 @@ model Player {
   matchParticipants MatchParticipant[]
   mmrAdjustments    MmrAdjustment[]
   seasonStats       PlayerSeasonStat[]
+  gameStats         PlayerGameStat[]
+}
+
+model PlayerGameStat {
+  id         String   @id @default(cuid())
+  playerId   String
+  game       Game     @default(LOL)
+  currentMmr Int      @default(1000)
+  peakMmr    Int      @default(1000)
+  wins       Int      @default(0)
+  losses     Int      @default(0)
+
+  player     Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, game])
 }
 
 model Season {
   id        String   @id @default(cuid())
   name      String
+  game      Game     @default(LOL)
   isActive  Boolean  @default(true)
   startDate DateTime @default(now())
   endDate   DateTime?
@@ -52,6 +75,7 @@ model PlayerSeasonStat {
 model MmrAdjustment {
   id        String   @id @default(cuid())
   playerId  String
+  game      Game     @default(LOL)
   amount    Int
   date      DateTime @default(now())
 
@@ -60,6 +84,7 @@ model MmrAdjustment {
 
 model Match {
   id        String   @id @default(cuid())
+  game      Game     @default(LOL)
   date      DateTime @default(now())
   winner    String   // "BLUE" or "RED"
   seasonId  String?
@@ -79,6 +104,7 @@ model MatchParticipant {
   kills    Int
   deaths   Int
   assists  Int
+  points   Int?   @default(0)
 
   match  Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)

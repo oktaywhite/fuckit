@@ -10,20 +10,33 @@ import {
 import { Trophy } from "lucide-react";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
-export default async function LeaderboardPage() {
-  const allPlayers = await prisma.player.findMany({
+export default async function LeaderboardPage(props: { searchParams: Promise<{ game?: string }> }) {
+  const params = await Promise.resolve(props.searchParams);
+  const gameParam = params?.game || "LOL";
+  const game = (gameParam === "ROCKET_LEAGUE" || gameParam === "VALORANT") ? gameParam : "LOL";
+
+  const allGameStats = await prisma.playerGameStat.findMany({
+    where: { game: game as any },
     orderBy: { currentMmr: 'desc' },
     include: {
-      matchParticipants: true
+      player: {
+        include: {
+          matchParticipants: {
+            where: { match: { game: game as any } }
+          }
+        }
+      }
     }
   });
 
-  const playersWithStats = allPlayers.map(player => {
-    const totalMatches = player.wins + player.losses;
-    const winRate = totalMatches > 0 ? Math.round((player.wins / totalMatches) * 100) : 0;
+  const playersWithStats = allGameStats.map(stat => {
+    const player = stat.player;
+    const totalMatches = stat.wins + stat.losses;
+    const winRate = totalMatches > 0 ? Math.round((stat.wins / totalMatches) * 100) : 0;
 
     const totalKills = player.matchParticipants.reduce((acc: number, mp: any) => acc + mp.kills, 0);
     const totalDeaths = player.matchParticipants.reduce((acc: number, mp: any) => acc + mp.deaths, 0) || 1;
@@ -31,7 +44,12 @@ export default async function LeaderboardPage() {
     const kda = Number(((totalKills + totalAssists) / totalDeaths).toFixed(2));
 
     return {
-      ...player,
+      id: player.id,
+      nickname: player.nickname,
+      avatar: player.avatar,
+      currentMmr: stat.currentMmr,
+      wins: stat.wins,
+      losses: stat.losses,
       totalMatches,
       winRate,
       kda
@@ -49,16 +67,29 @@ export default async function LeaderboardPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col space-y-2">
-        <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight flex items-center gap-4">
-          <div className="bg-primary/10 p-3 rounded-2xl">
-            <Trophy className="h-8 w-8 text-primary" />
-          </div>
-          Sıralama
-        </h1>
-        <p className="text-muted-foreground text-lg max-w-2xl">
-          FUCKIT'in en iyileri. Gerçek MMR'a dayalı kesin sıralama tablosu.
-        </p>
+      <div className="flex flex-col md:flex-row md:items-end justify-between space-y-4 md:space-y-0">
+        <div className="flex flex-col space-y-2">
+          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight flex items-center gap-4">
+            <div className="bg-primary/10 p-3 rounded-2xl">
+              <Trophy className="h-8 w-8 text-primary" />
+            </div>
+            Sıralama
+          </h1>
+          <p className="text-muted-foreground text-lg max-w-2xl">
+            FUCKIT'in en iyileri. Gerçek MMR'a dayalı kesin sıralama tablosu.
+          </p>
+        </div>
+        <div className="flex gap-2 bg-muted/30 p-1.5 rounded-xl border border-border/50">
+          <Link href="?game=LOL">
+            <Button variant={game === "LOL" ? "default" : "ghost"} size="sm" className="rounded-lg">LoL</Button>
+          </Link>
+          <Link href="?game=ROCKET_LEAGUE">
+            <Button variant={game === "ROCKET_LEAGUE" ? "default" : "ghost"} size="sm" className="rounded-lg">Rocket League</Button>
+          </Link>
+          <Link href="?game=VALORANT">
+            <Button variant={game === "VALORANT" ? "default" : "ghost"} size="sm" className="rounded-lg">Valorant</Button>
+          </Link>
+        </div>
       </div>
 
       <div className="rounded-3xl border border-border/50 bg-background/40 backdrop-blur-md shadow-sm overflow-hidden p-2">
@@ -91,7 +122,7 @@ export default async function LeaderboardPage() {
                         #{index + 1}
                       </TableCell>
                       <TableCell>
-                        <Link href={`/player/${player.nickname}`} className="flex items-center gap-3 w-fit group-hover:-translate-y-0.5 transition-transform">
+                        <Link href={`/player/${player.nickname}?game=${game}`} className="flex items-center gap-3 w-fit group-hover:-translate-y-0.5 transition-transform">
                           <Avatar className="h-10 w-10 border border-primary/20 shadow-sm">
                             <AvatarImage src={player.avatar || undefined} alt={player.nickname} />
                             <AvatarFallback className="bg-primary/10 text-primary font-bold">

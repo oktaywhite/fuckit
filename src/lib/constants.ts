@@ -16,3 +16,9 @@ export const CHAMPIONS = [
   "Viego", "Viktor", "Vladimir", "Volibear", "Warwick", "Wukong", "Xayah", "Xerath", "Xin Zhao", "Yasuo", "Yone",
   "Yorick", "Yunara", "Yuumi", "Zac", "Zed", "Zeri", "Ziggs", "Zilean", "Zoe", "Zyra"
 ];
+
+export const VALORANT_AGENTS = [
+  "Astra", "Breach", "Brimstone", "Chamber", "Clove", "Cypher", "Deadlock", "Fade", "Gekko", 
+  "Harbor", "Iso", "Jett", "KAY/O", "Killjoy", "Neon", "Omen", "Phoenix", "Raze", 
+  "Reyna", "Sage", "Skye", "Sova", "Tejo", "Viper", "Vyse", "Yoru"
+];

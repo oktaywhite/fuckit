@@ -9,7 +9,7 @@ import { startSeasonAction, endSeasonAction } from "./actions";
 export const dynamic = "force-dynamic";
 
 export default async function SeasonAdminPage() {
-  const activeSeason = await (prisma as any).season.findFirst({
+  const activeSeasons = await (prisma as any).season.findMany({
     where: { isActive: true },
   });
 
@@ -32,32 +32,48 @@ export default async function SeasonAdminPage() {
             <CardDescription>Şu anki aktif sezonun detayları.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {activeSeason ? (
+            {activeSeasons.length > 0 ? (
               <div className="space-y-4">
-                <div className="p-4 bg-primary/10 border border-primary/20 rounded-xl">
-                  <h3 className="font-bold text-lg text-primary mb-1">{activeSeason.name}</h3>
-                  <div className="text-sm text-muted-foreground space-y-1">
-                    <p>Başlangıç: {activeSeason.startDate.toLocaleDateString('tr-TR')}</p>
-                    {activeSeason.endDate && (
-                      <p>Bitiş Hedefi: {activeSeason.endDate.toLocaleDateString('tr-TR')}</p>
-                    )}
+                {activeSeasons.map((activeSeason: any) => (
+                  <div key={activeSeason.id} className="p-4 bg-primary/10 border border-primary/20 rounded-xl mb-4">
+                    <h3 className="font-bold text-lg text-primary mb-1">{activeSeason.name} ({activeSeason.game})</h3>
+                    <div className="text-sm text-muted-foreground space-y-1">
+                      <p>Başlangıç: {activeSeason.startDate.toLocaleDateString('tr-TR')}</p>
+                      {activeSeason.endDate && (
+                        <p>Bitiş Hedefi: {activeSeason.endDate.toLocaleDateString('tr-TR')}</p>
+                      )}
+                    </div>
+                    
+                    <form action={endSeasonAction} className="mt-4">
+                      <input type="hidden" name="seasonId" value={activeSeason.id} />
+                      <Button type="submit" variant="destructive" className="w-full font-bold">
+                        Sezonu Bitir
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-2 text-center">
+                        Sezon bittiğinde tüm oyuncuların {activeSeason.game} MMR ve maç istatistikleri sıfırlanır, geçmiş sezon arşivine kaydedilir.
+                      </p>
+                    </form>
                   </div>
-                </div>
-                <form action={endSeasonAction}>
-                  <input type="hidden" name="seasonId" value={activeSeason.id} />
-                  <Button type="submit" variant="destructive" className="w-full font-bold">
-                    Sezonu Bitir
-                  </Button>
-                  <p className="text-xs text-muted-foreground mt-2 text-center">
-                    Sezon bittiğinde tüm oyuncuların MMR ve maç istatistikleri sıfırlanır, geçmiş sezon arşivine kaydedilir.
-                  </p>
-                </form>
+                ))}
               </div>
             ) : (
               <div className="p-6 bg-muted/50 border border-border/50 rounded-xl text-center">
                 <p className="text-muted-foreground font-medium mb-4">Şu an aktif bir sezon yok.</p>
-                <form action={startSeasonAction} className="space-y-4 text-left">
-                  <div className="space-y-2">
+              </div>
+            )}
+
+            <div className="pt-6 border-t border-border/50">
+              <h3 className="font-bold text-lg mb-4">Yeni Sezon Başlat</h3>
+              <form action={startSeasonAction} className="space-y-4 text-left bg-muted/30 p-4 rounded-xl border border-border/50">
+                <div className="space-y-2">
+                  <Label>Oyun</Label>
+                  <select name="game" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background" required>
+                    <option value="LOL">League of Legends</option>
+                    <option value="ROCKET_LEAGUE">Rocket League</option>
+                    <option value="VALORANT">Valorant</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
                     <Label>Sezon Adı</Label>
                     <Input name="name" placeholder="Örn: Sezon 2" required />
                   </div>
@@ -65,10 +81,9 @@ export default async function SeasonAdminPage() {
                     <Label>Kaç Gün Sürecek?</Label>
                     <Input name="days" type="number" min="1" placeholder="Örn: 30" required />
                   </div>
-                  <Button type="submit" className="w-full">Yeni Sezon Başlat</Button>
-                </form>
-              </div>
-            )}
+                <Button type="submit" className="w-full">Yeni Sezon Başlat</Button>
+              </form>
+            </div>
           </CardContent>
         </Card>
 
@@ -86,7 +101,7 @@ export default async function SeasonAdminPage() {
                   {pastSeasons.map((season: any) => (
                     <div key={season.id} className="p-3 bg-muted/30 border border-border/50 rounded-lg flex justify-between items-center">
                       <div>
-                        <p className="font-semibold">{season.name}</p>
+                        <p className="font-semibold">{season.name} ({season.game})</p>
                         <p className="text-xs text-muted-foreground">
                           {season.startDate.toLocaleDateString('tr-TR')} - {season.endDate?.toLocaleDateString('tr-TR')}
                         </p>

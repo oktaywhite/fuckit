@@ -103,7 +103,7 @@ export default async function SeasonDetailPage({ params, searchParams }: { param
               <div className="text-muted-foreground p-4 bg-background/40 rounded-xl border border-border/50 text-sm">Veri yok.</div>
             ) : (
               season.stats.map((stat: any, index: number) => (
-                <Link key={stat.id} href={`/player/${stat.player.nickname}`}>
+                <Link key={stat.id} href={`/player/${stat.player.nickname}?game=${season.game}`}>
                   <Card className="transition-all hover:bg-muted/30 hover:border-primary/50 hover:shadow-md border-border/50 bg-background/40 backdrop-blur-md">
                     <CardHeader className="p-3 flex flex-row items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -157,11 +157,11 @@ export default async function SeasonDetailPage({ params, searchParams }: { param
                             {p.champion.substring(0, 2).toUpperCase()}
                           </div>
                           <div className="flex flex-col min-w-0">
-                            <Link href={`/player/${p.player.nickname}`} className="truncate text-xs font-medium hover:underline text-muted-foreground group-hover:text-foreground transition-colors">
+                            <Link href={`/player/${p.player.nickname}?game=${season.game}`} className="truncate text-xs font-medium hover:underline text-muted-foreground group-hover:text-foreground transition-colors">
                               {p.player.nickname}
                             </Link>
-                            <span className="text-[9px] font-mono text-muted-foreground/60 leading-none mt-0.5">
-                              {p.kills} / {p.deaths} / {p.assists}
+                            <span className="text-[9px] font-mono text-muted-foreground/60 leading-none mt-0.5" title={season.game === "ROCKET_LEAGUE" ? "Gol / Asist / Save / Puan" : "KDA"}>
+                              {season.game === "ROCKET_LEAGUE" ? `${p.kills} / ${p.assists} / ${p.deaths} / ${p.points || 0}` : `${p.kills} / ${p.deaths} / ${p.assists}`}
                             </span>
                           </div>
                         </div>
@@ -178,11 +178,11 @@ export default async function SeasonDetailPage({ params, searchParams }: { param
                             {p.champion.substring(0, 2).toUpperCase()}
                           </div>
                           <div className="flex flex-col items-end min-w-0">
-                            <Link href={`/player/${p.player.nickname}`} className="truncate text-xs font-medium hover:underline text-muted-foreground group-hover:text-foreground transition-colors">
+                            <Link href={`/player/${p.player.nickname}?game=${season.game}`} className="truncate text-xs font-medium hover:underline text-muted-foreground group-hover:text-foreground transition-colors">
                               {p.player.nickname}
                             </Link>
-                            <span className="text-[9px] font-mono text-muted-foreground/60 leading-none mt-0.5">
-                              {p.kills} / {p.deaths} / {p.assists}
+                            <span className="text-[9px] font-mono text-muted-foreground/60 leading-none mt-0.5" title={season.game === "ROCKET_LEAGUE" ? "Gol / Asist / Save / Puan" : "KDA"}>
+                              {season.game === "ROCKET_LEAGUE" ? `${p.kills} / ${p.assists} / ${p.deaths} / ${p.points || 0}` : `${p.kills} / ${p.deaths} / ${p.assists}`}
                             </span>
                           </div>
                         </div>

@@ -30,6 +30,8 @@ export function MatchFilter({ seasons = [], basePath = "/matches", hideSeason = 
     if (season && season !== "all" && !hideSeason) params.set("season", season);
     if (date) params.set("date", format(date, "yyyy-MM-dd"));
     if (sort !== "desc") params.set("sort", sort);
+    const game = searchParams.get("game");
+    if (game) params.set("game", game);
 
     router.push(`${basePath}?${params.toString()}`);
   };
@@ -39,7 +41,12 @@ export function MatchFilter({ seasons = [], basePath = "/matches", hideSeason = 
     setSeason("all");
     setDate(undefined);
     setSort("desc");
-    router.push(basePath);
+    const game = searchParams.get("game");
+    if (game) {
+      router.push(`${basePath}?game=${game}`);
+    } else {
+      router.push(basePath);
+    }
   };
 
   return (

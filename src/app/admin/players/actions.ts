@@ -28,6 +28,9 @@ export async function addPlayerAction(state: any, formData: FormData) {
     },
   });
 
+  // Yeni oyuncunun varsayılan 1000 MMR statlarının oluşması için tetikliyoruz
+  await recalculateAllPlayerStats();
+
   revalidatePath("/admin/players");
   revalidatePath("/players");
   revalidatePath("/leaderboard");
@@ -55,6 +58,7 @@ export async function deletePlayerAction(formData: FormData) {
 export async function adjustPlayerMmrAction(formData: FormData) {
   const playerId = formData.get("playerId") as string;
   const newMmrStr = formData.get("newMmr") as string;
+  const game = (formData.get("game") as string) || "LOL";
 
   if (!playerId || !newMmrStr) return { error: "Eksik bilgi." };
 
@@ -67,15 +71,27 @@ export async function adjustPlayerMmrAction(formData: FormData) {
 
   if (!player) return { error: "Oyuncu bulunamadı." };
 
-  // Hesaplanacak miktar: Yeni hedeflenen MMR - Şu anki MMR
-  const amount = newMmr - player.currentMmr;
+  // Get the game-specific stat, or assume 1000 if none exists
+  const gameStat = await prisma.playerGameStat.findUnique({
+    where: { playerId_game: { playerId, game: game as any } }
+  });
 
-  if (amount === 0) return { error: "MMR değeri zaten aynı." };
+  const currentMmr = gameStat?.currentMmr ?? 1000;
+  const amount = newMmr - currentMmr;
 
-  // Müdahale kaydı ekle
+  if (amount === 0) {
+    if (gameStat) {
+      return { error: "MMR değeri zaten aynı." };
+    } else {
+      // Sadece kayıt oluşturmak için amount 0 olsa bile (örn: 1000) müdahale geçmişi oluşturur
+    }
+  }
+
+  // Müdahale kaydı ekle (game-scoped)
   await (prisma as any).mmrAdjustment.create({
     data: {
       playerId,
+      game: game as any,
       amount,
       date: new Date(),
     }
@@ -88,4 +104,6 @@ export async function adjustPlayerMmrAction(formData: FormData) {
   revalidatePath("/players");
   revalidatePath("/leaderboard");
   revalidatePath("/");
+  revalidatePath("/rocket-league");
+  revalidatePath("/valorant");
 }
