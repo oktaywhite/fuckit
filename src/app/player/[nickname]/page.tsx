@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { getRankFromMmr, getRankStyle, getNextRank, RANK_THRESHOLDS } from "@/lib/rank";
+import { calculateBaseMmrChange, calculateFinalMmr } from "@/lib/mmr";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -74,6 +75,79 @@ export default async function PlayerProfilePage({
     }
   });
   const championSeasons = pastSeasons.filter((s: any) => s.stats.length > 0 && s.stats[0].playerId === player.id);
+
+  // --- Calculate per-match MMR changes by replaying the timeline ---
+  const activeSeason = await (prisma as any).season.findFirst({
+    where: { isActive: true },
+    orderBy: { startDate: "desc" },
+  });
+
+  const allMatches = await prisma.match.findMany({
+    where: activeSeason ? { seasonId: activeSeason.id } : {},
+    orderBy: { date: "asc" },
+    include: { participants: true },
+  });
+
+  const allAdjustments = await (prisma as any).mmrAdjustment.findMany({
+    orderBy: { date: "asc" },
+  });
+
+  type TimelineEvent =
+    | { type: "MATCH"; date: Date; data: any }
+    | { type: "ADJUSTMENT"; date: Date; data: any };
+
+  const timeline: TimelineEvent[] = [
+    ...allMatches.map((m: any) => ({ type: "MATCH" as const, date: m.date, data: m })),
+    ...allAdjustments.map((a: any) => ({ type: "ADJUSTMENT" as const, date: a.date, data: a })),
+  ].sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  const pStates = new Map<string, { mmr: number; winStreak: number; lossStreak: number }>();
+  const getPS = (id: string) => {
+    if (!pStates.has(id)) pStates.set(id, { mmr: 1000, winStreak: 0, lossStreak: 0 });
+    return pStates.get(id)!;
+  };
+
+  const mmrChangeMap = new Map<string, number>(); // matchId -> mmrChange for this player
+
+  for (const event of timeline) {
+    if (event.type === "ADJUSTMENT") {
+      const adj = event.data;
+      const st = getPS(adj.playerId);
+      st.mmr += adj.amount;
+      continue;
+    }
+
+    const match = event.data;
+    const blueTeam = match.participants.filter((p: any) => p.team === "BLUE");
+    const redTeam = match.participants.filter((p: any) => p.team === "RED");
+    if (blueTeam.length === 0 || redTeam.length === 0) continue;
+
+    const blueAvg = blueTeam.reduce((acc: number, p: any) => acc + getPS(p.playerId).mmr, 0) / blueTeam.length;
+    const redAvg = redTeam.reduce((acc: number, p: any) => acc + getPS(p.playerId).mmr, 0) / redTeam.length;
+
+    const { blueMmrChange, redMmrChange } = calculateBaseMmrChange(blueAvg, redAvg, match.winner as "BLUE" | "RED");
+
+    for (const participant of match.participants) {
+      const st = getPS(participant.playerId);
+      const isWinner = participant.team === match.winner;
+      const baseChange = participant.team === "BLUE" ? blueMmrChange : redMmrChange;
+      const { finalMmr, change } = calculateFinalMmr(st.mmr, baseChange, st.winStreak, st.lossStreak);
+
+      if (participant.playerId === player.id) {
+        mmrChangeMap.set(match.id, change);
+      }
+
+      st.mmr = finalMmr;
+      if (isWinner) {
+        st.winStreak += 1;
+        st.lossStreak = 0;
+      } else {
+        st.lossStreak += 1;
+        st.winStreak = 0;
+      }
+    }
+  }
+  // --- End MMR change calculation ---
 
   const teammateStats: Record<string, { nickname: string; matches: number; wins: number; id: string }> = {};
 
@@ -320,7 +394,7 @@ export default async function PlayerProfilePage({
                           </div>
                           <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
                             <span className="text-muted-foreground font-medium">Ulaşılan Seviye</span>
-                            <div className={cn("px-2 py-0.5 h-5 text-[10px] rounded-full font-bold border flex items-center justify-center uppercase", getRankStyle(getRankFromMmr(stat.finalMmr)))}>{getRankFromMmr(stat.finalMmr)}</div>
+                            <div className={cn("px-2 py-0.5 h-5 text-[10px] rounded-full font-bold border flex items-center justify-center uppercase w-fit", getRankStyle(getRankFromMmr(stat.finalMmr)))}>{getRankFromMmr(stat.finalMmr)}</div>
                           </div>
                           <div className="flex justify-between items-center text-sm">
                             <span className="text-muted-foreground font-medium">Toplam Skor</span>
@@ -348,7 +422,7 @@ export default async function PlayerProfilePage({
                     <span className="text-muted-foreground font-medium">MMR</span>
                     <span className="font-bold font-mono text-primary flex items-center gap-1"><Trophy className="w-3 h-3" /> {stat.finalMmr}</span>
                   </div>
-                  <div className={cn("px-1.5 py-0 h-4 text-[9px] rounded-full font-bold border flex items-center justify-center uppercase mt-1", getRankStyle(getRankFromMmr(stat.finalMmr)))}>{getRankFromMmr(stat.finalMmr)}</div>
+                  <div className={cn("px-1.5 py-0 h-4 text-[9px] rounded-full font-bold border flex items-center justify-center uppercase mt-1 w-fit", getRankStyle(getRankFromMmr(stat.finalMmr)))}>{getRankFromMmr(stat.finalMmr)}</div>
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-muted-foreground font-medium">Skor</span>
                     <span className="font-bold text-[10px]">
@@ -378,6 +452,7 @@ export default async function PlayerProfilePage({
             player.matchParticipants.map((mp: any) => {
               const match = mp.match;
               const isWin = mp.team === match.winner;
+              const mmrChange = mmrChangeMap.get(match.id);
 
               return (
                 <div
@@ -386,7 +461,7 @@ export default async function PlayerProfilePage({
                     }`}
                 >
                   {/* Result indicator */}
-                  <div className="flex flex-row md:flex-col justify-between md:justify-center items-center md:w-24 shrink-0">
+                  <div className="flex flex-row md:flex-col flex-wrap justify-between md:justify-center items-center md:w-28 shrink-0 gap-1">
                     <span className={`font-bold text-lg ${isWin ? "text-blue-400" : "text-red-400"}`}>
                       {isWin ? "VICTORY" : "DEFEAT"}
                     </span>
@@ -394,7 +469,7 @@ export default async function PlayerProfilePage({
                       {match.date.toLocaleDateString()}
                     </span>
                     {match.season && (
-                      <Badge variant="secondary" className="mt-1 text-[10px] leading-tight px-1.5 py-0 h-4 min-h-0 bg-primary/10 text-primary hover:bg-primary/20 border-primary/20">
+                      <Badge variant="secondary" className="mt-0.5 text-[10px] leading-tight px-1.5 py-0.5 h-auto min-h-0 bg-primary/10 text-primary hover:bg-primary/20 border-primary/20 max-w-full text-center whitespace-normal break-words">
                         {match.season.name}
                       </Badge>
                     )}
@@ -409,6 +484,22 @@ export default async function PlayerProfilePage({
                       </span>
                     </div>
                   </div>
+
+                  {/* MMR Change */}
+                  {mmrChange !== undefined && (
+                    <div className="flex items-center justify-center shrink-0">
+                      <span className={cn(
+                        "font-mono font-black text-base px-3 py-1.5 rounded-lg border",
+                        mmrChange > 0
+                          ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20"
+                          : mmrChange < 0
+                            ? "text-red-500 bg-red-500/10 border-red-500/20"
+                            : "text-muted-foreground bg-muted/10 border-border/50"
+                      )}>
+                        {mmrChange > 0 ? `+${mmrChange}` : mmrChange}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Teams Overview */}
                   <div className="hidden md:flex flex-row gap-6 items-center text-xs w-72 shrink-0 bg-background/50 p-2 rounded-md border border-border/50">
